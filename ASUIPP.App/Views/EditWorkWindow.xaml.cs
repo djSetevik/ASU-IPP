@@ -20,12 +20,18 @@ namespace ASUIPP.App.Views
         public WorkStatus EditedStatus { get; private set; }
         public WorkItem EditedWorkItem { get; private set; }
 
-        public EditWorkWindow(PlannedWork work, WorkItem currentWorkItem, List<WorkItem> allSectionItems)
+        private readonly List<PlannedWork> _allWorks;
+        private readonly int _sectionId;
+
+        public EditWorkWindow(PlannedWork work, WorkItem currentWorkItem,
+            List<WorkItem> allSectionItems, List<PlannedWork> allTeacherWorks)
         {
             InitializeComponent();
             Helpers.ZoomHelper.Apply(this);
 
             _work = work;
+            _allWorks = allTeacherWorks;
+            _sectionId = work.SectionId;
 
             // Список пунктов
             _allItems = allSectionItems.Select(wi => new WorkItemDisplay
@@ -114,6 +120,20 @@ namespace ASUIPP.App.Views
                         "АСУИПП");
                     return;
                 }
+            }
+
+            // Проверка лимитов
+            int targetSectionId = _sectionId;
+            if (selectedItem != null)
+                targetSectionId = selectedItem.SectionId;
+
+            var error = Core.Helpers.PointsLimits.Validate(
+                points, targetSectionId, _work.WorkId, _allWorks);
+            if (error != null)
+            {
+                MessageBox.Show(error, "Ограничение баллов",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
             }
 
             EditedWorkName = WorkNameBox.Text.Trim();

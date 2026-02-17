@@ -92,6 +92,17 @@ namespace ASUIPP.Core.Data
 
             // Версия схемы для будущих миграций
             EnsureSetting("SchemaVersion", "1");
+
+                    db.Execute(@"
+            CREATE TABLE IF NOT EXISTS AcademicPeriods (
+                PeriodId INTEGER PRIMARY KEY AUTOINCREMENT,
+                YearStart INTEGER NOT NULL,
+                Semester INTEGER NOT NULL,
+                UNIQUE(YearStart, Semester)
+            )");
+
+            try { db.Execute("ALTER TABLE PlannedWorks ADD COLUMN PeriodId INTEGER DEFAULT 0"); }
+            catch { }
         }
 
         private void EnsureSetting(string key, string value)

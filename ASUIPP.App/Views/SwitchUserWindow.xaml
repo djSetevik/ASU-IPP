@@ -30,12 +30,15 @@
         </ListBox>
 
         <DockPanel Grid.Row="2" Margin="0,0,0,10">
-            <Button DockPanel.Dock="Left" Content="🗑 Удалить выбранного" Padding="10,4"
+            <Button DockPanel.Dock="Left" Content="🗑 Удалить" Padding="10,4"
                     Click="Delete_Click" Foreground="DarkRed"/>
+            <Button DockPanel.Dock="Left" Content="＋ Добавить" Padding="10,4" Margin="10,0,0,0"
+                    Click="Add_Click"/>
             <CheckBox x:Name="IsHeadCheckBox" VerticalAlignment="Center"
                       Content="Войти как заведующий кафедрой"
                       HorizontalAlignment="Right"/>
         </DockPanel>
+        
 
         <TextBlock Grid.Row="3" x:Name="InfoText" Foreground="Gray" FontSize="11"
                    TextWrapping="Wrap" Margin="0,0,0,10"/>

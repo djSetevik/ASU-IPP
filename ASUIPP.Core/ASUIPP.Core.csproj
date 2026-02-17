@@ -128,6 +128,7 @@
   <ItemGroup>
     <Compile Include="Data\DatabaseContext.cs" />
     <Compile Include="Data\DatabaseInitializer.cs" />
+    <Compile Include="Data\Repositories\AcademicPeriodRepository.cs" />
     <Compile Include="Data\Repositories\IReferenceRepository.cs" />
     <Compile Include="Data\Repositories\ISettingsRepository.cs" />
     <Compile Include="Data\Repositories\ITeacherRepository.cs" />
@@ -137,7 +138,10 @@
     <Compile Include="Data\Repositories\TeacherRepository.cs" />
     <Compile Include="Data\Repositories\WorkRepository.cs" />
     <Compile Include="Helpers\FileHelper.cs" />
+    <Compile Include="Helpers\NameHelper.cs" />
+    <Compile Include="Helpers\PointsLimits.cs" />
     <Compile Include="Helpers\PointsValidator.cs" />
+    <Compile Include="Model\AcademicPeriod.cs" />
     <Compile Include="Model\AppSettings.cs" />
     <Compile Include="Model\AttachedFile.cs" />
     <Compile Include="Model\ExportPackage.cs" />

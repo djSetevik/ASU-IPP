@@ -60,5 +60,13 @@ namespace ASUIPP.Core.Data.Repositories
             db.Execute("DELETE FROM Teachers WHERE TeacherId = @TeacherId",
                 new { TeacherId = teacherId });
         }
+
+        public bool ExistsByFullName(string fullName)
+        {
+            var db = _context.GetConnection();
+            return db.QueryFirstOrDefault<int>(
+                "SELECT COUNT(*) FROM Teachers WHERE FullName = @FullName",
+                new { FullName = fullName }) > 0;
+        }
     }
 }

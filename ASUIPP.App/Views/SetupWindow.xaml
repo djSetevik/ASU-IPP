@@ -4,7 +4,8 @@
         Title="АСУИПП — Первоначальная настройка"
         Width="550" Height="500"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Background="#C0C0C0">
 
     <Grid Margin="20">
         <Grid.RowDefinitions>

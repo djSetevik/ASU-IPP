@@ -7,6 +7,7 @@ using ASUIPP.Core.Models;
 using ASUIPP.App.Views;
 using Hardcodet.Wpf.TaskbarNotification;
 
+
 namespace ASUIPP.App
 {
     public partial class App : Application
@@ -14,10 +15,22 @@ namespace ASUIPP.App
         private TaskbarIcon _trayIcon;
         private DatabaseContext _dbContext;
         private bool _startMinimized;
+        private System.Threading.Mutex _mutex;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Запрет множественных копий
+            bool createdNew;
+            _mutex = new System.Threading.Mutex(true, "ASUIPP_SingleInstance_Mutex", out createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("АСУИПП уже запущен.\nПроверьте область уведомлений (трей).",
+                    "АСУИПП", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
 
             // Принудительно добавляем путь к SQLite.Interop.dll
             var appDir = AppDomain.CurrentDomain.BaseDirectory;

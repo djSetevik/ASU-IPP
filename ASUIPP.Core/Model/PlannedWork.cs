@@ -16,6 +16,10 @@ namespace ASUIPP.Core.Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
 
+        public int PeriodId { get; set; }
+
+
+
         // Навигационные свойства
         public WorkItem WorkItem { get; set; }
         public List<AttachedFile> AttachedFiles { get; set; } = new List<AttachedFile>();

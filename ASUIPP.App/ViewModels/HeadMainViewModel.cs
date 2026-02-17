@@ -136,7 +136,7 @@ namespace ASUIPP.App.ViewModels
 
         private void AddTeacher()
         {
-            var dialog = new Views.AddTeacherWindow { Owner = App.Current.MainWindow };
+            var dialog = new Views.AddTeacherWindow(_dbContext) { Owner = App.Current.MainWindow };
             if (dialog.ShowDialog() == true)
             {
                 var teacher = new Teacher

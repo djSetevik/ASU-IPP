@@ -1,6 +1,7 @@
 ﻿using ASUIPP.App.Helpers;
 using ASUIPP.Core.Data;
 using ASUIPP.Core.Data.Repositories;
+using ASUIPP.Core.Helpers;
 using ASUIPP.Core.Models;
 using System;
 using System.Collections.ObjectModel;
@@ -20,7 +21,8 @@ namespace ASUIPP.App.ViewModels
             set => SetProperty(ref _totalPoints, value);
         }
 
-        public string DisplayName => $"{SectionId}. {Name}";
+        public string DisplayName { get; set; }
+        public bool IsOverLimit { get; internal set; }
     }
 
     public class SectionsViewModel : ViewModelBase
@@ -30,7 +32,7 @@ namespace ASUIPP.App.ViewModels
         private readonly WorkRepository _workRepo;
         private readonly ReferenceRepository _refRepo;
         private readonly TeacherRepository _teacherRepo;
-
+        private readonly int _periodId;
         public ObservableCollection<SectionDisplayItem> Sections { get; }
             = new ObservableCollection<SectionDisplayItem>();
 
@@ -62,8 +64,9 @@ namespace ASUIPP.App.ViewModels
         // Событие для навигации в MainWindow
         public event System.Action<int> SectionSelected;
 
-        public SectionsViewModel(DatabaseContext dbContext, string teacherId)
+        public SectionsViewModel(DatabaseContext dbContext, string teacherId, int periodId)
         {
+            _periodId = periodId;
             _dbContext = dbContext;
             _teacherId = teacherId;
             _workRepo = new WorkRepository(dbContext);
@@ -156,24 +159,39 @@ namespace ASUIPP.App.ViewModels
 
         public void LoadData()
         {
-            var teacher = _teacherRepo.GetById(_teacherId);
-            TeacherName = teacher?.FullName ?? "Неизвестный";
+            var refRepo = new ReferenceRepository(_dbContext);
+            var sections = refRepo.GetAllSections();
+            var works = _workRepo.GetByTeacherAndPeriod(_teacherId, _periodId);
 
-            var sections = _refRepo.GetAllSections();
+            var teacherRepo = new TeacherRepository(_dbContext);
+            var teacher = teacherRepo.GetById(_teacherId);
+            TeacherName = teacher?.ShortName ?? "";
 
             Sections.Clear();
+            int grandTotal = 0;
+
             foreach (var sec in sections)
             {
-                var points = _workRepo.GetSectionPointsByTeacher(_teacherId, sec.SectionId);
+                var rawSum = works
+                    .Where(w => w.SectionId == sec.SectionId)
+                    .Sum(w => w.Points);
+
+                var effectiveSum = System.Math.Min(rawSum, Core.Helpers.PointsLimits.MaxPerSection);
+
                 Sections.Add(new SectionDisplayItem
                 {
                     SectionId = sec.SectionId,
-                    Name = sec.Name,
-                    TotalPoints = points
+                    DisplayName = $"{sec.SectionId}. {sec.Name}",
+                    TotalPoints = effectiveSum,
+                    IsOverLimit = rawSum > Core.Helpers.PointsLimits.MaxPerSection
                 });
+
+                grandTotal += effectiveSum;
             }
 
-            GrandTotal = Sections.Sum(s => s.TotalPoints);
+            GrandTotal = System.Math.Min(grandTotal, Core.Helpers.PointsLimits.MaxTotal);
+            OnPropertyChanged(nameof(TeacherName));
+            OnPropertyChanged(nameof(GrandTotal));
         }
 
         public void Refresh()

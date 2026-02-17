@@ -23,7 +23,7 @@ namespace ASUIPP.App.ViewModels
         private readonly int _sectionId;
         private readonly WorkRepository _workRepo;
         private readonly ReferenceRepository _refRepo;
-
+        private readonly int _periodId;
         // Добавьте в начало класса вместе с остальными свойствами:
 
         public List<StatusOption> StatusOptions { get; } = new List<StatusOption>
@@ -81,11 +81,13 @@ namespace ASUIPP.App.ViewModels
         public event Action GoBackRequested;
         public event Action AddWorkRequested;
 
-        public SectionDetailViewModel(DatabaseContext dbContext, string teacherId, int sectionId)
+        public SectionDetailViewModel(DatabaseContext dbContext, string teacherId, int sectionId, int periodId)
         {
             _dbContext = dbContext;
             _teacherId = teacherId;
             _sectionId = sectionId;
+            _periodId = periodId;
+            _workRepo = new WorkRepository(dbContext);
             _workRepo = new WorkRepository(dbContext);
             _refRepo = new ReferenceRepository(dbContext);
 
@@ -176,14 +178,18 @@ namespace ASUIPP.App.ViewModels
 
             LoadData();
         }
+        public string ValidatePoints(int points, string excludeWorkId = null)
+        {
+            var allWorks = _workRepo.GetByTeacherAndPeriod(_teacherId, _periodId);
+            return PointsLimits.Validate(points, _sectionId, excludeWorkId, allWorks);
+        }
 
         public void LoadData()
         {
+            var works = _workRepo.GetByTeacherSectionAndPeriod(_teacherId, _sectionId, _periodId);
             var sections = _refRepo.GetAllSections();
             var section = sections.FirstOrDefault(s => s.SectionId == _sectionId);
             SectionName = section != null ? $"{section.SectionId}. {section.Name}" : "Раздел";
-
-            var works = _workRepo.GetByTeacherAndSection(_teacherId, _sectionId);
 
             // Подгружаем WorkItem для отображения названия пункта
             foreach (var work in works)
@@ -195,21 +201,36 @@ namespace ASUIPP.App.ViewModels
             foreach (var w in works)
                 Works.Add(w);
 
-            SectionPoints = Works.Sum(w => w.Points);
-            GrandTotal = _workRepo.GetTotalPointsByTeacher(_teacherId);
+            SectionPoints = System.Math.Min(
+                Works.Sum(w => w.Points),
+                Core.Helpers.PointsLimits.MaxPerSection);
+
+            // Общий итого
+            var allWorks = _workRepo.GetByTeacherAndPeriod(_teacherId, _periodId);
+            var refRepo = new ReferenceRepository(_dbContext);
+            var sectionIds = refRepo.GetAllSections().Select(s => s.SectionId).ToList();
+            GrandTotal = Core.Helpers.PointsLimits.EffectiveTotal(allWorks, sectionIds);
         }
 
-        public void AddWork(WorkItem selectedItem, string workName, int points, DateTime? dueDate)
+        public void AddWork(WorkItem item, string workName, int points, DateTime? dueDate)
         {
+            var error = ValidatePoints(points);
+            if (error != null)
+            {
+                System.Windows.MessageBox.Show(error, "Ограничение баллов",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                return;
+            }
             var work = new PlannedWork
             {
                 TeacherId = _teacherId,
                 SectionId = _sectionId,
-                ItemId = selectedItem.ItemId,
+                ItemId = item.ItemId,
                 WorkName = workName,
                 Points = points,
                 DueDate = dueDate,
-                Status = WorkStatus.Planned
+                Status = WorkStatus.Planned,
+                PeriodId = _periodId
             };
 
             _workRepo.Insert(work);

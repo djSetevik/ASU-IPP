@@ -16,11 +16,17 @@ namespace ASUIPP.App.Views
         public string WorkName { get; private set; }
         public int Points { get; private set; }
         public DateTime? DueDate { get; private set; }
+        private readonly List<PlannedWork> _allWorks;
+        private readonly int _sectionId;
 
-        public WorkItemPickerWindow(List<WorkItem> workItems)
+
+        public WorkItemPickerWindow(List<WorkItem> workItems, int sectionId, List<PlannedWork> allTeacherWorks)
         {
             InitializeComponent();
             Helpers.ZoomHelper.Apply(this);
+
+            _allWorks = allTeacherWorks;
+            _sectionId = sectionId;
 
             _allItems = workItems.Select(wi => new WorkItemDisplay
             {
@@ -89,6 +95,16 @@ namespace ASUIPP.App.Views
             WorkName = WorkNameBox.Text.Trim();
             Points = points;
             DueDate = DueDatePicker.SelectedDate;
+
+            var error = Core.Helpers.PointsLimits.Validate(
+                Points, _sectionId, null, _allWorks);
+            if (error != null)
+            {
+                MessageBox.Show(error, "Ограничение баллов",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             DialogResult = true;
         }
 

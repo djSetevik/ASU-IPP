@@ -189,6 +189,22 @@ namespace ASUIPP.Core.Data.Repositories
                 new { WorkId = workId });
         }
 
+        public List<PlannedWork> GetByTeacherAndPeriod(string teacherId, int periodId)
+        {
+            var db = _context.GetConnection();
+            return db.Query<PlannedWork>(
+                "SELECT * FROM PlannedWorks WHERE TeacherId = @TeacherId AND (PeriodId = @PeriodId OR PeriodId = 0)",
+                new { TeacherId = teacherId, PeriodId = periodId }).ToList();
+        }
+
+        public List<PlannedWork> GetByTeacherSectionAndPeriod(string teacherId, int sectionId, int periodId)
+        {
+            var db = _context.GetConnection();
+            return db.Query<PlannedWork>(
+                "SELECT * FROM PlannedWorks WHERE TeacherId = @TeacherId AND SectionId = @SectionId AND (PeriodId = @PeriodId OR PeriodId = 0)",
+                new { TeacherId = teacherId, SectionId = sectionId, PeriodId = periodId }).ToList();
+        }
+
         // ── Вспомогательные ────────────────────────────────────
         //уээээээээуэуэуээуэуэуэуэуэуэуэ
         private void FillAttachedFiles(List<PlannedWork> works)

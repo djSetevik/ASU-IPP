@@ -19,7 +19,9 @@ namespace ASUIPP.App.Views
         private SectionsViewModel _sectionsVm;
         private HeadMainViewModel _headVm;
         private double _zoomLevel = 1.0;
-        private ScaleTransform _scaleTransform;
+
+        private AcademicPeriodRepository _periodRepo;
+        private int _currentPeriodId;
 
         public MainWindow(DatabaseContext dbContext, AppSettings appSettings)
         {
@@ -29,6 +31,9 @@ namespace ASUIPP.App.Views
             _dbContext = dbContext;
             _appSettings = appSettings;
             _nav = new NavigationService(ContentArea);
+
+            _periodRepo = new AcademicPeriodRepository(_dbContext);
+            LoadPeriods();
 
             TitleText.Text = $"АСУИПП — {(_appSettings.IsHead ? "Заведующий кафедрой" : "Преподаватель")}";
             AutoStartMenuItem.IsChecked = Helpers.AutoStartHelper.IsEnabled();
@@ -107,6 +112,62 @@ namespace ASUIPP.App.Views
             catch { }
         }
 
+        private void LoadPeriods()
+        {
+            var periods = _periodRepo.GetAll();
+
+            if (periods.Count == 0)
+            {
+                // Создаём текущий период автоматически
+                var now = DateTime.Now;
+                int yearStart = now.Month >= 9 ? now.Year : now.Year - 1;
+                int semester = now.Month >= 2 && now.Month <= 8 ? 2 : 1;
+                var period = _periodRepo.GetOrCreate(yearStart, semester);
+                periods = _periodRepo.GetAll();
+            }
+
+            PeriodCombo.ItemsSource = periods;
+
+            // Восстанавливаем выбранный
+            var settingsRepo = new SettingsRepository(_dbContext);
+            var savedPeriod = settingsRepo.Get("CurrentPeriodId");
+            if (!string.IsNullOrEmpty(savedPeriod) && int.TryParse(savedPeriod, out var pid))
+            {
+                _currentPeriodId = pid;
+            }
+            else
+            {
+                _currentPeriodId = periods.First().PeriodId;
+            }
+            PeriodCombo.SelectedValue = _currentPeriodId;
+        }
+
+        private void PeriodCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (PeriodCombo.SelectedValue is int pid && pid != _currentPeriodId)
+            {
+                _currentPeriodId = pid;
+                var settingsRepo = new SettingsRepository(_dbContext);
+                settingsRepo.Set("CurrentPeriodId", pid.ToString());
+
+                // Перезагружаем текущий вид
+                if (_appSettings.IsHead)
+                    ShowHeadView();
+                else
+                    ShowSections(_appSettings.CurrentTeacherId);
+            }
+        }
+
+        private void AddPeriod_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AddPeriodWindow(_dbContext) { Owner = this };
+            Helpers.ZoomHelper.Apply(dialog);
+            if (dialog.ShowDialog() == true)
+            {
+                LoadPeriods();
+                PeriodCombo.SelectedValue = dialog.CreatedPeriodId;
+            }
+        }
         private void LoadZoomLevel()
         {
             try
@@ -130,6 +191,8 @@ namespace ASUIPP.App.Views
         private void ShowHeadView()
         {
             NavPanel.Visibility = Visibility.Collapsed;
+            ActionPanel.Visibility = Visibility.Collapsed;
+            _currentViewTeacherId = null;
 
             _headVm = new HeadMainViewModel(_dbContext, _appSettings.CurrentTeacherId);
             _headVm.GoToTeacherWorkRequested += () => ShowSections(_appSettings.CurrentTeacherId);
@@ -142,13 +205,17 @@ namespace ASUIPP.App.Views
 
         private void ShowTeacherSections(string teacherId)
         {
+            _currentViewTeacherId = teacherId;
+            NavPanel.Visibility = Visibility.Visible;
+            ActionPanel.Visibility = Visibility.Visible;
+
             var teacherRepo = new TeacherRepository(_dbContext);
             var teacher = teacherRepo.GetById(teacherId);
 
             NavPanel.Visibility = Visibility.Visible;
             NavTitle.Text = $"Работы: {teacher?.ShortName ?? "Преподаватель"}";
 
-            _sectionsVm = new SectionsViewModel(_dbContext, teacherId);
+            _sectionsVm = new SectionsViewModel(_dbContext, teacherId, _currentPeriodId);
             _sectionsVm.SectionSelected += sectionId => ShowSectionDetail(teacherId, sectionId);
 
             var view = new SectionsView { DataContext = _sectionsVm };
@@ -159,17 +226,20 @@ namespace ASUIPP.App.Views
 
         private void ShowSections(string teacherId)
         {
+            _currentViewTeacherId = teacherId;
+            ActionPanel.Visibility = Visibility.Visible;
+
             if (_appSettings.IsHead)
             {
                 NavPanel.Visibility = Visibility.Visible;
-                NavTitle.Text = "Мои работы";
+                NavTitle.Text = "My work";
             }
             else
             {
                 NavPanel.Visibility = Visibility.Collapsed;
             }
 
-            _sectionsVm = new SectionsViewModel(_dbContext, teacherId);
+            _sectionsVm = new SectionsViewModel(_dbContext, teacherId, _currentPeriodId);
             _sectionsVm.SectionSelected += sectionId => ShowSectionDetail(teacherId, sectionId);
 
             var view = new SectionsView { DataContext = _sectionsVm };
@@ -178,8 +248,11 @@ namespace ASUIPP.App.Views
 
         private void ShowSectionDetail(string teacherId, int sectionId)
         {
+            _currentViewTeacherId = teacherId;
+            ActionPanel.Visibility = Visibility.Visible;
+            NavPanel.Visibility = Visibility.Visible;
             var refRepo = new ReferenceRepository(_dbContext);
-            var vm = new SectionDetailViewModel(_dbContext, teacherId, sectionId);
+            var vm = new SectionDetailViewModel(_dbContext, teacherId, sectionId, _currentPeriodId);
 
             vm.GoBackRequested += () =>
             {
@@ -195,7 +268,9 @@ namespace ASUIPP.App.Views
             vm.AddWorkRequested += () =>
             {
                 var workItems = refRepo.GetWorkItemsBySection(sectionId);
-                var picker = new WorkItemPickerWindow(workItems) { Owner = this };
+                var allWorks = new WorkRepository(_dbContext)
+                    .GetByTeacherAndPeriod(teacherId, _currentPeriodId);
+                var picker = new WorkItemPickerWindow(workItems, sectionId, allWorks) { Owner = this };
                 if (picker.ShowDialog() == true)
                     vm.AddWork(picker.SelectedWorkItem, picker.WorkName, picker.Points, picker.DueDate);
             };
@@ -204,7 +279,9 @@ namespace ASUIPP.App.Views
             {
                 var workItem = refRepo.GetWorkItem(work.SectionId, work.ItemId);
                 var allItems = refRepo.GetWorkItemsBySection(sectionId);
-                var editor = new EditWorkWindow(work, workItem, allItems) { Owner = this };
+                var allWorks = new WorkRepository(_dbContext)
+                    .GetByTeacherAndPeriod(teacherId, _currentPeriodId);
+                var editor = new EditWorkWindow(work, workItem, allItems, allWorks) { Owner = this };
                 if (editor.ShowDialog() == true)
                 {
                     vm.UpdateWork(work.WorkId, editor.EditedWorkName,
@@ -220,6 +297,71 @@ namespace ASUIPP.App.Views
 
             var view = new SectionDetailView { DataContext = vm };
             _nav.NavigateTo(view);
+        }
+
+        // Текущий teacherId для отчётов
+        private string _currentViewTeacherId;
+
+        private void Report_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_currentViewTeacherId)) return;
+            try
+            {
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "Save report",
+                    Filter = "Excel (*.xlsx)|*.xlsx",
+                    FileName = $"Report_{DateTime.Now:yyyy-MM-dd}.xlsx"
+                };
+                if (dialog.ShowDialog() != true) return;
+
+                var reportService = new Core.Services.ReportService(_dbContext);
+                var dir = System.IO.Path.GetDirectoryName(dialog.FileName);
+                var filePath = reportService.GeneratePersonalReport(_currentViewTeacherId, dir);
+
+                if (filePath != dialog.FileName && System.IO.File.Exists(filePath))
+                {
+                    if (System.IO.File.Exists(dialog.FileName)) System.IO.File.Delete(dialog.FileName);
+                    System.IO.File.Move(filePath, dialog.FileName);
+                    filePath = dialog.FileName;
+                }
+
+                var result = MessageBox.Show($"Saved:\n{filePath}\n\nOpen?", "ASUIPP", MessageBoxButton.YesNo);
+                if (result == MessageBoxResult.Yes)
+                    System.Diagnostics.Process.Start(filePath);
+            }
+            catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}", "ASUIPP"); }
+        }
+
+        private void Export_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_currentViewTeacherId)) return;
+            try
+            {
+                var saveDialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Title = "Save archive",
+                    Filter = "ZIP (*.zip)|*.zip",
+                    FileName = $"ASUIPP_{DateTime.Now:yyyy-MM-dd}.zip"
+                };
+                if (saveDialog.ShowDialog() != true) return;
+
+                var dir = System.IO.Path.GetDirectoryName(saveDialog.FileName);
+                var exportService = new Core.Services.ExportService(
+                    new Core.Data.Repositories.WorkRepository(_dbContext),
+                    new Core.Data.Repositories.TeacherRepository(_dbContext),
+                    new Core.Data.Repositories.SettingsRepository(_dbContext));
+                var filePath = exportService.Export(_currentViewTeacherId, dir);
+
+                if (filePath != saveDialog.FileName && System.IO.File.Exists(filePath))
+                {
+                    if (System.IO.File.Exists(saveDialog.FileName)) System.IO.File.Delete(saveDialog.FileName);
+                    System.IO.File.Move(filePath, saveDialog.FileName);
+                }
+
+                MessageBox.Show($"Saved:\n{saveDialog.FileName}", "ASUIPP");
+            }
+            catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}", "ASUIPP"); }
         }
 
         // ── Навигация ──

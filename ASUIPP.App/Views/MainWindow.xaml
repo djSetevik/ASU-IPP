@@ -6,6 +6,13 @@
         WindowStyle="None" AllowsTransparency="False"
         ResizeMode="CanResizeWithGrip"
         Background="#C0C0C0">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Resources/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
     <Border BorderBrush="#808080" BorderThickness="2">
         <DockPanel>
@@ -39,13 +46,24 @@
                     <MenuItem Header="Сменить пользователя" Click="Logout_Click"/>
                     <MenuItem Header="Сбросить настройки" Click="ResetSettings_Click"/>
                 </MenuItem>
-                <MenuItem Header="Свернуть в трей" Click="Hide_Click"/>
             </Menu>
 
-            <!-- Панель навигации + масштаб -->
+            <!-- Навигация + действия -->
             <Border DockPanel.Dock="Top" Background="#C0C0C0" Padding="5,3"
                     BorderBrush="#808080" BorderThickness="0,0,0,1">
                 <DockPanel>
+                    <!-- Период -->
+                    <StackPanel x:Name="PeriodPanel" DockPanel.Dock="Right" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,15,0">
+                        <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
+                        <ComboBox x:Name="PeriodCombo" Width="200" FontSize="11"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedValuePath="PeriodId"
+                                  SelectionChanged="PeriodCombo_Changed"/>
+                        <Button Content="+" Width="24" Height="22" Padding="0" Margin="3,0,0,0"
+                                Click="AddPeriod_Click" FontSize="12" ToolTip="Добавить период"/>
+                    </StackPanel>
+                    <!-- Масштаб справа -->
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Масштаб:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
                         <Button Content="−" Width="26" Height="22" Padding="0"
@@ -56,6 +74,26 @@
                                 Click="ZoomIn_Click" FontSize="13" FontWeight="Bold"/>
                     </StackPanel>
 
+                    <!-- Кнопки действий (отчет, экспорт) -->
+                    <StackPanel x:Name="ActionPanel" DockPanel.Dock="Right" Orientation="Horizontal"
+                                Visibility="Collapsed" Margin="0,0,10,0">
+                        <Button x:Name="BtnReport" Padding="6,3" Margin="3,0"
+                                Click="Report_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{StaticResource IconReport}" Width="16" Height="16" Margin="0,0,4,0"/>
+                                <TextBlock Text="Отчет" VerticalAlignment="Center" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="BtnExport" Padding="6,3" Margin="3,0"
+                                Click="Export_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{StaticResource IconExport}" Width="16" Height="16" Margin="0,0,4,0"/>
+                                <TextBlock Text="Экспорт" VerticalAlignment="Center" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Навигация слева -->
                     <StackPanel x:Name="NavPanel" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Content="← Назад" Padding="10,3" Click="GoBackToHead_Click"/>
                         <TextBlock x:Name="NavTitle" VerticalAlignment="Center"
@@ -63,7 +101,6 @@
                     </StackPanel>
                 </DockPanel>
             </Border>
-
             <!-- Статусбар -->
             <Border DockPanel.Dock="Bottom" Background="#C0C0C0" Height="22"
                     BorderBrush="#808080" BorderThickness="0,1,0,0">

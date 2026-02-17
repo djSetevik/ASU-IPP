@@ -1,11 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using ASUIPP.Core.Data;
 using ASUIPP.Core.Data.Repositories;
-using ASUIPP.Core.Helpers;
-using ASUIPP.Core.Models;
 
 namespace ASUIPP.App.Views
 {
@@ -24,6 +22,7 @@ namespace ASUIPP.App.Views
         {
             InitializeComponent();
             Helpers.ZoomHelper.Apply(this);
+
             _dbContext = dbContext;
             _currentTeacherId = currentTeacherId;
             _teacherRepo = new TeacherRepository(dbContext);
@@ -42,7 +41,7 @@ namespace ASUIPP.App.Views
                     TeacherId = t.TeacherId,
                     FullName = t.FullName,
                     IsHead = t.IsHead,
-                    RoleText = t.IsHead ? "(завкафедрой)" : "",
+                    RoleText = t.IsHead ? "(zavkaf)" : "",
                     IsCurrent = t.TeacherId == _currentTeacherId
                 })
             );
@@ -56,65 +55,107 @@ namespace ASUIPP.App.Views
                 IsHeadCheckBox.IsChecked = current.IsHead;
             }
 
-            InfoText.Text = $"Всего пользователей: {_items.Count}";
+            InfoText.Text = $"Total: {_items.Count}";
         }
 
         private void Login_Click(object sender, RoutedEventArgs e)
         {
             if (!(UsersList.SelectedItem is UserListItem selected))
             {
-                MessageBox.Show("Выберите пользователя.", "АСУИПП");
+                MessageBox.Show("Select user.", "ASUIPP");
                 return;
             }
 
+            bool wantHead = IsHeadCheckBox.IsChecked == true;
+
+            // Only one head allowed
+            if (wantHead && !selected.IsHead)
+            {
+                var existing = _items.FirstOrDefault(i => i.IsHead && i.TeacherId != selected.TeacherId);
+                if (existing != null)
+                {
+                    MessageBox.Show(
+                        $"Head is already assigned: {existing.FullName}.\nOnly one user can be head.",
+                        "ASUIPP", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
             SelectedTeacherId = selected.TeacherId;
-            SelectedIsHead = IsHeadCheckBox.IsChecked == true;
+            SelectedIsHead = wantHead;
             DialogResult = true;
+        }
+
+        private void Add_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AddTeacherWindow(_dbContext);
+            dialog.Owner = this;
+            if (dialog.ShowDialog() == true)
+            {
+                var teacher = new Core.Models.Teacher
+                {
+                    TeacherId = System.Guid.NewGuid().ToString(),
+                    FullName = dialog.TeacherFullName,
+                    ShortName = Core.Helpers.NameHelper.ToShortName(dialog.TeacherFullName),
+                    IsHead = false,
+                    CreatedAt = System.DateTime.Now
+                };
+                _teacherRepo.Insert(teacher);
+
+                _items.Add(new UserListItem
+                {
+                    TeacherId = teacher.TeacherId,
+                    FullName = teacher.FullName,
+                    IsHead = false,
+                    RoleText = "",
+                    IsCurrent = false
+                });
+
+                UsersList.SelectedItem = _items.Last();
+                InfoText.Text = $"Added. Total: {_items.Count}";
+            }
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
             if (!(UsersList.SelectedItem is UserListItem selected))
             {
-                MessageBox.Show("Выберите пользователя для удаления.", "АСУИПП");
+                MessageBox.Show("Select user to delete.", "ASUIPP");
                 return;
             }
 
             if (selected.TeacherId == _currentTeacherId)
             {
-                MessageBox.Show("Нельзя удалить текущего пользователя.\nСначала переключитесь на другого.",
-                    "АСУИПП", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Cannot delete current user.\nSwitch to another user first.",
+                    "ASUIPP", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (_items.Count <= 1)
             {
-                MessageBox.Show("Нельзя удалить последнего пользователя.", "АСУИПП");
+                MessageBox.Show("Cannot delete last user.", "ASUIPP");
                 return;
             }
 
             var worksCount = _workRepo.GetByTeacher(selected.TeacherId).Count;
-            var msg = $"Удалить пользователя \"{selected.FullName}\"?";
+            var msg = $"Delete user \"{selected.FullName}\"?";
             if (worksCount > 0)
-                msg += $"\n\nБудут также удалены все его работы ({worksCount} шт.) и прикреплённые файлы.";
+                msg += $"\n\nAll works ({worksCount}) and files will be deleted.";
 
-            var result = MessageBox.Show(msg, "Подтверждение удаления",
+            var result = MessageBox.Show(msg, "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (result != MessageBoxResult.Yes) return;
 
-            // Удаляем файлы с диска
             var works = _workRepo.GetByTeacher(selected.TeacherId);
             foreach (var work in works)
             {
-                FileHelper.DeleteWorkFiles(selected.TeacherId, work.WorkId);
+                Core.Helpers.FileHelper.DeleteWorkFiles(selected.TeacherId, work.WorkId);
             }
 
-            // Удаляем из БД (каскадно удалятся PlannedWorks и AttachedFiles)
             _teacherRepo.Delete(selected.TeacherId);
-
             _items.Remove(selected);
-            InfoText.Text = $"Пользователь удалён. Осталось: {_items.Count}";
+            InfoText.Text = $"Deleted. Remaining: {_items.Count}";
         }
 
         public class UserListItem
