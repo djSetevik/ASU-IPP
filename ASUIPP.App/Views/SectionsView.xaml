@@ -1,0 +1,62 @@
+﻿<UserControl x:Class="ASUIPP.App.Views.SectionsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Шапка -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,12">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Padding="8,4" Margin="5,0"
+                        Command="{Binding CreateReportCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{StaticResource IconReport}" Width="20" Height="20" Margin="0,0,5,0"/>
+                        <TextBlock Text="Создать отчет" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Padding="8,4"
+                        Command="{Binding ExportCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{StaticResource IconExport}" Width="20" Height="20" Margin="0,0,5,0"/>
+                        <TextBlock Text="Экспорт" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+            <TextBlock FontSize="16" FontStyle="Italic" VerticalAlignment="Center">
+                <Run Text="Добро пожаловать, "/><Run Text="{Binding TeacherName, Mode=OneWay}" FontWeight="Bold"/><Run Text="!"/>
+            </TextBlock>
+        </DockPanel>
+
+        <!-- Разделы -->
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Sections}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Button Margin="0,3" Padding="12,10" HorizontalContentAlignment="Stretch"
+                            Command="{Binding DataContext.OpenSectionCommand,
+                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center">
+                                <Run Text="Сумма балов: "/><Run Text="{Binding TotalPoints, Mode=OneWay}"/>
+                            </TextBlock>
+                            <TextBlock Text="{Binding DisplayName}" FontSize="15" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Итого -->
+        <Border Grid.Row="2" Style="{StaticResource Win95Panel}" Margin="0,10,0,0" Padding="10,8">
+            <TextBlock HorizontalAlignment="Right" FontSize="18" FontWeight="Bold">
+                <Run Text="ИТОГО Сумма балов: "/><Run Text="{Binding GrandTotal, Mode=OneWay}"/>
+            </TextBlock>
+        </Border>
+    </Grid>
+</UserControl>

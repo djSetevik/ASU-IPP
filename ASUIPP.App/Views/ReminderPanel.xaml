@@ -1,0 +1,57 @@
+﻿<Window x:Class="ASUIPP.App.Views.ReminderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="АСУИПП" Width="300"
+        WindowStyle="ToolWindow" Topmost="True"
+        ShowInTaskbar="False" ResizeMode="NoResize">
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" FontSize="13" Margin="0,0,0,3">
+            <Run Text="Добро пожаловать, "/><Run Text="{Binding WelcomeName, Mode=OneWay}" FontWeight="Bold"/><Run Text="!"/>
+        </TextBlock>
+
+        <TextBlock Grid.Row="1" Text="СПИСОК РАБОТ" FontSize="14" FontWeight="Bold"
+                   HorizontalAlignment="Center" Margin="0,0,0,8"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,2" Padding="8,6" Background="#F0F0F0"
+                                BorderBrush="#CCC" BorderThickness="1" CornerRadius="2"
+                                Cursor="Hand" MouseLeftButtonUp="Item_Click"
+                                Tag="{Binding}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding WorkName}" FontSize="12"
+                                           TextWrapping="Wrap" FontWeight="SemiBold"/>
+                                <TextBlock FontSize="11" Margin="0,3,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="Black"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsOverdue}" Value="True">
+                                                    <Setter Property="Foreground" Value="Red"/>
+                                                    <Setter Property="FontWeight" Value="Bold"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsUrgent}" Value="True">
+                                                    <Setter Property="Foreground" Value="OrangeRed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                    <Run Text="{Binding DaysText, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</Window>

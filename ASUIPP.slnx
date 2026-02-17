@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ASUIPP.Core/ASUIPP.Core.csproj" Id="0514cc5d-4aec-4fd7-84fe-749b96f2b265" />
+  <Project Path="ASUIPP.App/ASUIPP.App.csproj" Id="b7c3cc5c-91e3-4503-b40b-b94126d8ca8b" />
+</Solution>
