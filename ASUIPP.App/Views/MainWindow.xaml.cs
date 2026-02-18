@@ -20,9 +20,6 @@ namespace ASUIPP.App.Views
         private HeadMainViewModel _headVm;
         private double _zoomLevel = 1.0;
 
-        private AcademicPeriodRepository _periodRepo;
-        private int _currentPeriodId;
-
         public MainWindow(DatabaseContext dbContext, AppSettings appSettings)
         {
             InitializeComponent();
@@ -32,8 +29,6 @@ namespace ASUIPP.App.Views
             _appSettings = appSettings;
             _nav = new NavigationService(ContentArea);
 
-            _periodRepo = new AcademicPeriodRepository(_dbContext);
-            LoadPeriods();
 
             TitleText.Text = $"АСУИПП — {(_appSettings.IsHead ? "Заведующий кафедрой" : "Преподаватель")}";
             AutoStartMenuItem.IsChecked = Helpers.AutoStartHelper.IsEnabled();
@@ -112,62 +107,6 @@ namespace ASUIPP.App.Views
             catch { }
         }
 
-        private void LoadPeriods()
-        {
-            var periods = _periodRepo.GetAll();
-
-            if (periods.Count == 0)
-            {
-                // Создаём текущий период автоматически
-                var now = DateTime.Now;
-                int yearStart = now.Month >= 9 ? now.Year : now.Year - 1;
-                int semester = now.Month >= 2 && now.Month <= 8 ? 2 : 1;
-                var period = _periodRepo.GetOrCreate(yearStart, semester);
-                periods = _periodRepo.GetAll();
-            }
-
-            PeriodCombo.ItemsSource = periods;
-
-            // Восстанавливаем выбранный
-            var settingsRepo = new SettingsRepository(_dbContext);
-            var savedPeriod = settingsRepo.Get("CurrentPeriodId");
-            if (!string.IsNullOrEmpty(savedPeriod) && int.TryParse(savedPeriod, out var pid))
-            {
-                _currentPeriodId = pid;
-            }
-            else
-            {
-                _currentPeriodId = periods.First().PeriodId;
-            }
-            PeriodCombo.SelectedValue = _currentPeriodId;
-        }
-
-        private void PeriodCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (PeriodCombo.SelectedValue is int pid && pid != _currentPeriodId)
-            {
-                _currentPeriodId = pid;
-                var settingsRepo = new SettingsRepository(_dbContext);
-                settingsRepo.Set("CurrentPeriodId", pid.ToString());
-
-                // Перезагружаем текущий вид
-                if (_appSettings.IsHead)
-                    ShowHeadView();
-                else
-                    ShowSections(_appSettings.CurrentTeacherId);
-            }
-        }
-
-        private void AddPeriod_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new AddPeriodWindow(_dbContext) { Owner = this };
-            Helpers.ZoomHelper.Apply(dialog);
-            if (dialog.ShowDialog() == true)
-            {
-                LoadPeriods();
-                PeriodCombo.SelectedValue = dialog.CreatedPeriodId;
-            }
-        }
         private void LoadZoomLevel()
         {
             try
@@ -215,7 +154,7 @@ namespace ASUIPP.App.Views
             NavPanel.Visibility = Visibility.Visible;
             NavTitle.Text = $"Работы: {teacher?.ShortName ?? "Преподаватель"}";
 
-            _sectionsVm = new SectionsViewModel(_dbContext, teacherId, _currentPeriodId);
+            _sectionsVm = new SectionsViewModel(_dbContext, teacherId);
             _sectionsVm.SectionSelected += sectionId => ShowSectionDetail(teacherId, sectionId);
 
             var view = new SectionsView { DataContext = _sectionsVm };
@@ -229,21 +168,23 @@ namespace ASUIPP.App.Views
             _currentViewTeacherId = teacherId;
             ActionPanel.Visibility = Visibility.Visible;
 
+            var vm = new SectionsViewModel(_dbContext, teacherId);
+
+            vm.SectionSelected += sectionId =>
+            {
+                ShowSectionDetail(teacherId, sectionId);
+            };
+
+            _nav.NavigateTo(new SectionsView { DataContext = vm });
+
             if (_appSettings.IsHead)
             {
                 NavPanel.Visibility = Visibility.Visible;
-                NavTitle.Text = "My work";
             }
             else
             {
                 NavPanel.Visibility = Visibility.Collapsed;
             }
-
-            _sectionsVm = new SectionsViewModel(_dbContext, teacherId, _currentPeriodId);
-            _sectionsVm.SectionSelected += sectionId => ShowSectionDetail(teacherId, sectionId);
-
-            var view = new SectionsView { DataContext = _sectionsVm };
-            _nav.NavigateTo(view);
         }
 
         private void ShowSectionDetail(string teacherId, int sectionId)
@@ -251,37 +192,30 @@ namespace ASUIPP.App.Views
             _currentViewTeacherId = teacherId;
             ActionPanel.Visibility = Visibility.Visible;
             NavPanel.Visibility = Visibility.Visible;
+
             var refRepo = new ReferenceRepository(_dbContext);
-            var vm = new SectionDetailViewModel(_dbContext, teacherId, sectionId, _currentPeriodId);
+            var section = refRepo.GetSection(sectionId);
+            NavTitle.Text = $"{sectionId}. {section?.Name ?? ""}";
 
-            vm.GoBackRequested += () =>
-            {
-                _sectionsVm?.Refresh();
-                _headVm?.Refresh();
+            var vm = new SectionDetailViewModel(_dbContext, teacherId, sectionId);
 
-                if (teacherId == _appSettings.CurrentTeacherId && !_appSettings.IsHead)
-                    ShowSections(teacherId);
-                else
-                    ShowTeacherSections(teacherId);
-            };
-
+            // Добавить работу
             vm.AddWorkRequested += () =>
             {
-                var workItems = refRepo.GetWorkItemsBySection(sectionId);
-                var allWorks = new WorkRepository(_dbContext)
-                    .GetByTeacherAndPeriod(teacherId, _currentPeriodId);
-                var picker = new WorkItemPickerWindow(workItems, sectionId, allWorks) { Owner = this };
+                var allItems = refRepo.GetWorkItemsBySection(sectionId);
+                // Убрали фильтрацию usedIds — пункт можно использовать несколько раз
+                var picker = new WorkItemPickerWindow(allItems) { Owner = this };
                 if (picker.ShowDialog() == true)
                     vm.AddWork(picker.SelectedWorkItem, picker.WorkName, picker.Points, picker.DueDate);
             };
 
+            // Редактировать работу
             vm.EditWorkRequested += work =>
             {
                 var workItem = refRepo.GetWorkItem(work.SectionId, work.ItemId);
                 var allItems = refRepo.GetWorkItemsBySection(sectionId);
-                var allWorks = new WorkRepository(_dbContext)
-                    .GetByTeacherAndPeriod(teacherId, _currentPeriodId);
-                var editor = new EditWorkWindow(work, workItem, allItems, allWorks) { Owner = this };
+                // Все пункты доступны
+                var editor = new EditWorkWindow(work, workItem, allItems) { Owner = this };
                 if (editor.ShowDialog() == true)
                 {
                     vm.UpdateWork(work.WorkId, editor.EditedWorkName,
@@ -289,11 +223,6 @@ namespace ASUIPP.App.Views
                         editor.EditedWorkItem);
                 }
             };
-
-            var sections = refRepo.GetAllSections();
-            var sec = sections.FirstOrDefault(s => s.SectionId == sectionId);
-            NavPanel.Visibility = Visibility.Visible;
-            NavTitle.Text = sec != null ? $"{sec.SectionId}. {sec.Name}" : "Раздел";
 
             var view = new SectionDetailView { DataContext = vm };
             _nav.NavigateTo(view);
@@ -370,8 +299,29 @@ namespace ASUIPP.App.Views
         {
             if (_appSettings.IsHead)
             {
-                _headVm?.Refresh();
-                ShowHeadView();
+                // Проверяем откуда пришли — из SectionDetail или из TeacherSections
+                if (ContentArea.Content is SectionDetailView)
+                {
+                    // Вернуться к списку разделов
+                    if (!string.IsNullOrEmpty(_currentViewTeacherId))
+                    {
+                        if (_currentViewTeacherId == _appSettings.CurrentTeacherId)
+                            ShowSections(_currentViewTeacherId);
+                        else
+                            ShowTeacherSections(_currentViewTeacherId);
+                    }
+                }
+                else
+                {
+                    // Вернуться к списку преподавателей
+                    _headVm?.Refresh();
+                    ShowHeadView();
+                }
+            }
+            else
+            {
+                // Преподаватель — вернуться к разделам
+                ShowSections(_appSettings.CurrentTeacherId);
             }
         }
 
@@ -405,7 +355,7 @@ namespace ASUIPP.App.Views
             var msg = $"Импортировано архивов: {imported}";
             if (errors > 0) msg += $"\nОшибок: {errors}";
             MessageBox.Show(msg, "Импорт завершён");
-            _headVm?.LoadData();
+            _headVm?.LoadTeachers();
         }
 
         // ── Меню ──

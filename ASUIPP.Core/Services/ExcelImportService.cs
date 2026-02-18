@@ -1,366 +1,444 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using ASUIPP.Core.Data;
+﻿using ASUIPP.Core.Data;
 using ASUIPP.Core.Data.Repositories;
 using ASUIPP.Core.Helpers;
 using ASUIPP.Core.Models;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace ASUIPP.Core.Services
 {
     public class ExcelImportService
     {
-        private readonly ReferenceRepository _referenceRepo;
+        private readonly DatabaseContext _context;
 
         public ExcelImportService(DatabaseContext context)
         {
-            _referenceRepo = new ReferenceRepository(context);
+            _context = context;
         }
 
-        public int ImportReference(string filePath)
+        /// <summary>
+        /// Результат импорта.
+        /// </summary>
+        public class ImportResult
         {
-            var workbook = OpenWorkbook(filePath);
-            var sheet = workbook.GetSheet("Показатели") ?? workbook.GetSheetAt(0);
+            public int SectionsCount { get; set; }
+            public int WorkItemsCount { get; set; }
+            public int TeachersCount { get; set; }
+            public int ScoresCount { get; set; }
+            public string Semester { get; set; }
+            public string Year { get; set; }
+            public List<string> Errors { get; set; } = new List<string>();
+        }
 
-            _referenceRepo.ClearAll();
+        /// <summary>
+        /// Полный импорт: разделы, пункты работ, преподаватели и их баллы.
+        /// </summary>
+        public ImportResult ImportAll(string excelPath)
+        {
+            var result = new ImportResult();
 
-            var rawRows = new List<RawRow>();
-            for (int rowIdx = 0; rowIdx <= sheet.LastRowNum; rowIdx++)
+            var sectionRepo = new SectionRepository(_context);
+            var workItemRepo = new WorkItemRepository(_context);
+            var teacherRepo = new TeacherRepository(_context);
+            var workRepo = new WorkRepository(_context);
+
+            using (var fs = new FileStream(excelPath, FileMode.Open, FileAccess.Read))
             {
-                var row = sheet.GetRow(rowIdx);
-                if (row == null) continue;
+                var workbook = new HSSFWorkbook(fs);
+                var sheet = workbook.GetSheetAt(0);
 
-                rawRows.Add(new RawRow
+                // ── 1. Читаем заголовок (семестр, год) ──
+                var headerRow = sheet.GetRow(0);
+                if (headerRow != null)
                 {
-                    RowIndex = rowIdx,
-                    ColA = GetCellString(row, 0),
-                    ColB = GetCellString(row, 1),
-                    ColC = GetCellString(row, 2)
-                });
-            }
-
-            int currentSectionId = 0;
-            int sortOrder = 0;
-            int itemCount = 0;
-            string currentMainItemNumber = null;
-            int subLetterIndex = 0;
-
-            for (int i = 0; i < rawRows.Count; i++)
-            {
-                var r = rawRows[i];
-                var colA = NormalizeSpaces(r.ColA);
-                var colB = NormalizeSpaces(r.ColB);
-                var colC = NormalizeSpaces(r.ColC);
-
-                // ── Проверяем заголовок раздела в ОБЕИХ колонках ──
-                // Раздел 1 лежит в колонке B, разделы 2-5 в колонке A
-                int detectedSection = TryParseSectionHeader(colA);
-                string sectionName = null;
-
-                if (detectedSection > 0)
-                {
-                    // Заголовок в колонке A (разделы 2-5)
-                    sectionName = ExtractSectionName(colA);
+                    var semCell = headerRow.GetCell(4);
+                    result.Semester = GetCellString(semCell);
+                    var yearCell = headerRow.GetCell(8);
+                    result.Year = GetCellString(yearCell);
                 }
-                else
+
+                // ── 2. Читаем ФИО преподавателей из строки 4 ──
+                var teacherRow = sheet.GetRow(4);
+                var teacherColumns = new Dictionary<int, Teacher>(); // colIndex → Teacher
+
+                if (teacherRow != null)
                 {
-                    detectedSection = TryParseSectionHeader(colB);
-                    if (detectedSection > 0)
+                    for (int col = 3; col < teacherRow.LastCellNum; col++)
                     {
-                        // Заголовок в колонке B (раздел 1)
-                        sectionName = ExtractSectionName(colB);
+                        var cell = teacherRow.GetCell(col);
+                        if (cell == null) continue;
+                        var name = GetCellString(cell);
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+
+                        // Создаём или находим преподавателя
+                        var existing = teacherRepo.GetByFullName(name);
+                        if (existing == null)
+                        {
+                            // Имя в формате "Хабаров В.И." — это уже ShortName
+                            // FullName = ShortName в данном случае
+                            existing = new Teacher
+                            {
+                                TeacherId = Guid.NewGuid().ToString(),
+                                FullName = name,
+                                ShortName = name,
+                                IsHead = false,
+                                CreatedAt = DateTime.Now
+                            };
+                            teacherRepo.Insert(existing);
+                            result.TeachersCount++;
+                        }
+                        teacherColumns[col] = existing;
                     }
                 }
 
-                if (detectedSection > 0 && sectionName != null)
+                // ── 3. Парсим разделы и пункты (существующая логика) ──
+                int currentSectionId = 0;
+                int sortOrder = 0;
+                int itemSortOrder = 0;
+
+                // Двухпроходный алгоритм
+                // Проход 1: собираем все разделы и пункты
+                var sections = new List<Section>();
+                var workItems = new List<WorkItem>();
+                var itemRows = new List<ItemRowData>(); // для привязки баллов
+
+                for (int rowIdx = 5; rowIdx <= sheet.LastRowNum; rowIdx++)
                 {
-                    currentSectionId = detectedSection;
-                    _referenceRepo.InsertSection(new Section
+                    var row = sheet.GetRow(rowIdx);
+                    if (row == null) continue;
+
+                    var cellA = GetCellString(row.GetCell(0));
+                    var cellB = GetCellString(row.GetCell(1));
+
+                    // Проверяем заголовок раздела
+                    int detectedSection = DetectSectionHeader(cellA, cellB);
+                    if (detectedSection > 0)
+                    {
+                        currentSectionId = detectedSection;
+                        var sectionName = ExtractSectionName(cellA, cellB);
+
+                        if (!sections.Any(s => s.SectionId == currentSectionId))
+                        {
+                            sections.Add(new Section
+                            {
+                                SectionId = currentSectionId,
+                                Name = sectionName,
+                                SortOrder = ++sortOrder
+                            });
+                        }
+                        itemSortOrder = 0;
+                        continue;
+                    }
+
+                    if (currentSectionId == 0) continue;
+
+                    // Строка "Итого" — конец
+                    if (cellA.ToLower().StartsWith("итого") || cellB.ToLower().StartsWith("итого"))
+                        break;
+
+                    // Определяем ItemId
+                    string itemId = null;
+                    string itemName = cellB;
+
+                    if (!string.IsNullOrEmpty(cellA))
+                    {
+                        // cellA может быть числом (1, 2, 3) или текстом (4.1, 4.2)
+                        var cleaned = cellA.Replace("\xa0", "").Trim();
+                        if (Regex.IsMatch(cleaned, @"^[\d.]+$"))
+                        {
+                            itemId = cleaned;
+                        }
+                    }
+
+                    // Подпункты: cellA пустой, cellB начинается с "-" или "а)" и т.п.
+                    if (string.IsNullOrEmpty(itemId) && !string.IsNullOrEmpty(cellB))
+                    {
+                        var trimmed = cellB.TrimStart(' ', '-', '\xa0');
+                        if (trimmed != cellB || cellB.StartsWith("     "))
+                        {
+                            // Это подпункт — генерируем ID
+                            // Берём последний основной пункт и добавляем подбукву
+                            var lastItem = workItems.LastOrDefault(w => w.SectionId == currentSectionId);
+                            if (lastItem != null)
+                            {
+                                var subCount = workItems.Count(w =>
+                                    w.SectionId == currentSectionId &&
+                                    w.ItemId.StartsWith(lastItem.ItemId.Split('.')[0]) &&
+                                    w.ItemId != lastItem.ItemId);
+
+                                var subLetters = "абвгдежзик";
+                                var subLetter = subCount < subLetters.Length
+                                    ? subLetters[subCount].ToString()
+                                    : (subCount + 1).ToString();
+
+                                var baseId = lastItem.ItemId.Contains(".")
+                                    ? lastItem.ItemId.Split('.')[0]
+                                    : lastItem.ItemId;
+                                itemId = $"{baseId}{subLetter}";
+                                itemName = cellB.Trim();
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(itemId)) continue;
+                    if (string.IsNullOrEmpty(itemName)) continue;
+
+                    // Баллы (колонка 2)
+                    var pointsStr = CleanPoints(GetCellString(row.GetCell(2)));
+
+                    // Проверяем что это не контейнер (пункт без баллов, с подпунктами)
+                    bool isContainer = string.IsNullOrEmpty(pointsStr) && IsContainerRow(sheet, rowIdx);
+
+                    int maxPointsNumeric = ParseMaxPoints(pointsStr);
+
+                    var wi = new WorkItem
                     {
                         SectionId = currentSectionId,
-                        Name = sectionName,
-                        SortOrder = currentSectionId
-                    });
-                    currentMainItemNumber = null;
-                    subLetterIndex = 0;
-                    continue;
-                }
+                        ItemId = itemId,
+                        Name = itemName.Trim(),
+                        MaxPoints = pointsStr,
+                        MaxPointsNumeric = maxPointsNumeric,
+                        SortOrder = ++itemSortOrder
+                    };
 
-                if (currentSectionId == 0) continue;
-
-                // Пропускаем служебные строки
-                if (colA == "№" || colA == "Итого") continue;
-                if (colB.StartsWith("Итого", StringComparison.OrdinalIgnoreCase)) continue;
-                if (string.IsNullOrEmpty(colB) && string.IsNullOrEmpty(colA)) continue;
-                if (string.IsNullOrEmpty(colB)) continue;
-
-                // ── Строка с номером в A — основной пункт ──
-                var numId = ParseNumericId(colA);
-                if (numId != null)
-                {
-                    currentMainItemNumber = numId;
-                    subLetterIndex = 0;
-
-                    if (!string.IsNullOrEmpty(colC))
+                    if (!isContainer)
                     {
-                        sortOrder++;
-                        _referenceRepo.InsertWorkItem(new WorkItem
+                        workItems.Add(wi);
+
+                        // Сохраняем данные строки для импорта баллов
+                        itemRows.Add(new ItemRowData
                         {
                             SectionId = currentSectionId,
-                            ItemId = numId,
-                            Name = CleanText(colB),
-                            MaxPoints = CleanPoints(colC),
-                            MaxPointsNumeric = PointsValidator.ParseMaxPoints(CleanPoints(colC)),
-                            SortOrder = sortOrder
+                            ItemId = itemId,
+                            ItemName = itemName.Trim(),
+                            RowIndex = rowIdx
                         });
-                        itemCount++;
                     }
                     else
                     {
-                        // Пункт без баллов — контейнер для подпунктов
-                        bool hasSubItems = LookAheadForSubItems(rawRows, i + 1);
-                        if (!hasSubItems)
+                        // Контейнер — добавляем но без баллов
+                        workItems.Add(wi);
+                    }
+                }
+
+                // ── 4. Сохраняем разделы и пункты в БД ──
+                foreach (var sec in sections)
+                {
+                    sectionRepo.InsertOrUpdate(sec);
+                    result.SectionsCount++;
+                }
+
+                foreach (var wi in workItems)
+                {
+                    workItemRepo.InsertOrUpdate(wi);
+                    result.WorkItemsCount++;
+                }
+
+                // ── 5. Импортируем баллы преподавателей ──
+                var today = DateTime.Now;
+
+                foreach (var itemData in itemRows)
+                {
+                    var row = sheet.GetRow(itemData.RowIndex);
+                    if (row == null) continue;
+
+                    // Находим WorkItem для получения MaxPoints
+                    WorkItem wi = null;
+                    foreach (var sec in sections)
+                    {
+                        if (sec.SectionId == itemData.SectionId)
                         {
-                            sortOrder++;
-                            _referenceRepo.InsertWorkItem(new WorkItem
-                            {
-                                SectionId = currentSectionId,
-                                ItemId = numId,
-                                Name = CleanText(colB),
-                                MaxPoints = "—",
-                                MaxPointsNumeric = null,
-                                SortOrder = sortOrder
-                            });
-                            itemCount++;
+                            var items = workItems.Where(w => w.SectionId == sec.SectionId && w.ItemId == itemData.ItemId);
+                            wi = items.FirstOrDefault();
+                            break;
                         }
                     }
-                    continue;
-                }
 
-                // ── Подпункт (A пуст, есть баллы в C) ──
-                if (string.IsNullOrEmpty(colA.Trim()) && !string.IsNullOrEmpty(colC) && currentMainItemNumber != null)
-                {
-                    subLetterIndex++;
-                    var subId = $"{currentMainItemNumber}{GetSubSuffix(subLetterIndex)}";
+                    int maxPerWork = wi?.MaxPointsNumeric ?? 0;
 
-                    sortOrder++;
-                    _referenceRepo.InsertWorkItem(new WorkItem
+                    foreach (var kvp in teacherColumns)
                     {
-                        SectionId = currentSectionId,
-                        ItemId = subId,
-                        Name = CleanText(colB),
-                        MaxPoints = CleanPoints(colC),
-                        MaxPointsNumeric = PointsValidator.ParseMaxPoints(CleanPoints(colC)),
-                        SortOrder = sortOrder
-                    });
-                    itemCount++;
+                        int col = kvp.Key;
+                        var teacher = kvp.Value;
+
+                        var pointsCell = row.GetCell(col);
+                        if (pointsCell == null) continue;
+
+                        int totalPoints = GetCellInt(pointsCell);
+                        if (totalPoints == 0) continue;
+
+                        // Проверяем нет ли уже работ по этому пункту
+                        var existingWorks = workRepo.GetByTeacher(teacher.TeacherId);
+                        if (existingWorks.Any(w =>
+                            w.SectionId == itemData.SectionId && w.ItemId == itemData.ItemId))
+                            continue;
+
+                        // Разбиваем на порции если maxPerWork > 0 и totalPoints > maxPerWork
+                        var portions = SplitPoints(totalPoints, maxPerWork);
+
+                        foreach (var portion in portions)
+                        {
+                            var work = new PlannedWork
+                            {
+                                WorkId = Guid.NewGuid().ToString(),
+                                TeacherId = teacher.TeacherId,
+                                SectionId = itemData.SectionId,
+                                ItemId = itemData.ItemId,
+                                WorkName = itemData.ItemName,
+                                Points = portion,
+                                DueDate = today,
+                                Status = WorkStatus.Confirmed,
+                                CreatedAt = today,
+                                UpdatedAt = today
+                            };
+
+                            try
+                            {
+                                workRepo.Insert(work);
+                                result.ScoresCount++;
+                            }
+                            catch (Exception ex)
+                            {
+                                result.Errors.Add(
+                                    $"Row {itemData.RowIndex}, {teacher.ShortName}: {ex.Message}");
+                            }
+                        }
+                    }
                 }
             }
 
-            return itemCount;
-        }
-
-        /// <summary>
-        /// Пытается распарсить заголовок раздела из строки.
-        /// Формат: "1.     Учебно-методическая работа" или "2.\xa0\xa0\xa0\xa0\xa0 Научно-..."
-        /// Возвращает номер раздела (1-5) или 0 если не заголовок.
-        /// </summary>
-        private int TryParseSectionHeader(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
-
-            // Паттерн: цифра, точка, несколько пробелов/\xa0, текст
-            var match = Regex.Match(text.Trim(), @"^(\d+)\.\s{2,}(.+)$");
-            if (match.Success)
-            {
-                if (int.TryParse(match.Groups[1].Value, out var num) && num >= 1 && num <= 10)
-                    return num;
-            }
-            return 0;
-        }
-
-        private string ExtractSectionName(string text)
-        {
-            var match = Regex.Match(text.Trim(), @"^\d+\.\s{2,}(.+)$");
-            return match.Success ? match.Groups[1].Value.Trim() : text.Trim();
-        }
-
-        /// <summary>
-        /// Заменяет неразрывные пробелы (\xa0) на обычные.
-        /// </summary>
-        private string NormalizeSpaces(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return "";
-            return text.Replace('\u00A0', ' ');
-        }
-
-        private bool LookAheadForSubItems(List<RawRow> rows, int startIndex)
-        {
-            for (int j = startIndex; j < rows.Count; j++)
-            {
-                var colA = NormalizeSpaces(rows[j].ColA).Trim();
-                var colB = NormalizeSpaces(rows[j].ColB).Trim();
-                var colC = NormalizeSpaces(rows[j].ColC).Trim();
-
-                if (string.IsNullOrEmpty(colB) && string.IsNullOrEmpty(colA)) continue;
-
-                // Следующий заголовок раздела — стоп
-                if (TryParseSectionHeader(colA) > 0 || TryParseSectionHeader(colB) > 0)
-                    return false;
-
-                // Следующий основной пункт с номером — стоп
-                if (ParseNumericId(colA) != null)
-                    return false;
-
-                if (colA.Trim() == "Итого" || colB.StartsWith("Итого"))
-                    return false;
-
-                // Подпункт: A пуст, C не пуст
-                if (string.IsNullOrEmpty(colA) && !string.IsNullOrEmpty(colC))
-                    return true;
-            }
-            return false;
-        }
-
-        public List<DepartmentInfo> ImportDepartments(string filePath)
-        {
-            var workbook = OpenWorkbook(filePath);
-            var sheet = workbook.GetSheet("Кафедры");
-            if (sheet == null) return new List<DepartmentInfo>();
-
-            var result = new List<DepartmentInfo>();
-            for (int rowIdx = 1; rowIdx <= sheet.LastRowNum; rowIdx++)
-            {
-                var row = sheet.GetRow(rowIdx);
-                if (row == null) continue;
-
-                var fullName = GetCellString(row, 1);
-                if (string.IsNullOrWhiteSpace(fullName)) continue;
-
-                result.Add(new DepartmentInfo
-                {
-                    FullName = fullName.Trim(),
-                    ShortName = GetCellString(row, 4).Trim(),
-                    HeadFullName = GetCellString(row, 2).Trim(),
-                    HeadTitle = GetCellString(row, 3).Trim()
-                });
-            }
             return result;
         }
 
-        public SemesterInfo ParseSemesterInfo(string filePath)
+        #region Helper methods
+        /// <summary>
+        /// Разбивает баллы на порции по максимуму за одну работу.
+        /// 28 при макс 8 → [8, 8, 8, 4]
+        /// 7 при макс 7 → [7]
+        /// 15 при макс 0 → [15] (без ограничения)
+        /// </summary>
+        private List<int> SplitPoints(int totalPoints, int maxPerWork)
         {
-            var workbook = OpenWorkbook(filePath);
-            var sheet = workbook.GetSheet("Показатели") ?? workbook.GetSheetAt(0);
-            var row0 = sheet.GetRow(0);
-            if (row0 == null) return new SemesterInfo();
+            var result = new List<int>();
 
-            var semNumber = GetCellString(row0, 4);
-            var year = GetCellString(row0, 8);
-
-            int sem = 0;
-            if (double.TryParse(semNumber, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var semDbl))
-                sem = (int)semDbl;
-
-            return new SemesterInfo
+            if (maxPerWork <= 0 || totalPoints <= maxPerWork)
             {
-                Year = year?.Trim() ?? "",
-                Number = sem
-            };
-        }
-
-        private IWorkbook OpenWorkbook(string filePath)
-        {
-            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            {
-                return Path.GetExtension(filePath).ToLowerInvariant() == ".xlsx"
-                    ? (IWorkbook)new XSSFWorkbook(fs)
-                    : new HSSFWorkbook(fs);
+                result.Add(totalPoints);
+                return result;
             }
+
+            int remaining = totalPoints;
+            while (remaining > 0)
+            {
+                int portion = Math.Min(remaining, maxPerWork);
+                result.Add(portion);
+                remaining -= portion;
+            }
+
+            return result;
+        }
+        private class ItemRowData
+        {
+            public int SectionId { get; set; }
+            public string ItemId { get; set; }
+            public string ItemName { get; set; }
+            public int RowIndex { get; set; }
         }
 
-        private string GetCellString(IRow row, int colIdx)
+        private int DetectSectionHeader(string cellA, string cellB)
         {
-            var cell = row.GetCell(colIdx);
-            if (cell == null) return "";
+            var text = (cellA + " " + cellB).Replace('\xa0', ' ').Trim();
+            var match = Regex.Match(text, @"^(\d+)\.\s+\S");
+            if (match.Success)
+                return int.Parse(match.Groups[1].Value);
+            return 0;
+        }
 
+        private string ExtractSectionName(string cellA, string cellB)
+        {
+            var text = string.IsNullOrEmpty(cellB)
+                ? cellA : cellB;
+            text = text.Replace('\xa0', ' ').Trim();
+            text = Regex.Replace(text, @"^\d+\.\s+", "");
+            return text.Trim();
+        }
+
+        private bool IsContainerRow(ISheet sheet, int rowIdx)
+        {
+            // Если следующая строка — подпункт (начинается с "-" или пробелов), это контейнер
+            var nextRow = sheet.GetRow(rowIdx + 1);
+            if (nextRow == null) return false;
+            var nextB = GetCellString(nextRow.GetCell(1));
+            var nextA = GetCellString(nextRow.GetCell(0));
+            return string.IsNullOrEmpty(nextA) &&
+                   (nextB.StartsWith("-") || nextB.StartsWith(" ") || nextB.StartsWith("\xa0"));
+        }
+
+        private string GetCellString(ICell cell)
+        {
+            if (cell == null) return "";
             switch (cell.CellType)
             {
+                case CellType.Numeric:
+                    return cell.NumericCellValue.ToString();
                 case CellType.String:
                     return cell.StringCellValue ?? "";
-                case CellType.Numeric:
-                    return cell.NumericCellValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 case CellType.Formula:
-                    try { return cell.StringCellValue ?? ""; }
-                    catch { return cell.NumericCellValue.ToString(System.Globalization.CultureInfo.InvariantCulture); }
+                    try { return cell.NumericCellValue.ToString(); }
+                    catch { return cell.StringCellValue ?? ""; }
                 default:
-                    return "";
+                    return cell.ToString() ?? "";
             }
         }
 
-        private string ParseNumericId(string raw)
+        private int GetCellInt(ICell cell)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return null;
-            var trimmed = raw.Trim();
-
-            if (double.TryParse(trimmed, System.Globalization.NumberStyles.Any,
-                System.Globalization.CultureInfo.InvariantCulture, out var num))
+            if (cell == null) return 0;
+            try
             {
-                if (num == Math.Floor(num))
-                    return ((int)num).ToString();
-                return num.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+                switch (cell.CellType)
+                {
+                    case CellType.Numeric:
+                        return (int)cell.NumericCellValue;
+                    case CellType.String:
+                        int.TryParse(cell.StringCellValue?.Trim(), out var v);
+                        return v;
+                    case CellType.Formula:
+                        return (int)cell.NumericCellValue;
+                    default:
+                        return 0;
+                }
             }
-            return null;
-        }
-
-        private string GetSubSuffix(int index)
-        {
-            var letters = "абвгдежзиклмнопрстуфхцчшщэюя";
-            return index >= 1 && index <= letters.Length
-                ? letters[index - 1].ToString()
-                : index.ToString();
-        }
-
-        private string CleanText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-            return Regex.Replace(text.Trim(), @"\s+", " ");
+            catch { return 0; }
         }
 
         private string CleanPoints(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return "";
-            var result = raw.Replace("\n", "").Replace("\r", "");
-            result = Regex.Replace(result, @"\s*/\s*", "/");
-            return result.Trim();
+            return raw.Replace("\n", "/").Replace("\r", "")
+                .Replace("\xa0", "").Trim()
+                .TrimEnd('/');
         }
 
-        private class RawRow
+        private int ParseMaxPoints(string pointsStr)
         {
-            public int RowIndex { get; set; }
-            public string ColA { get; set; }
-            public string ColB { get; set; }
-            public string ColC { get; set; }
+            if (string.IsNullOrEmpty(pointsStr)) return 0;
+            // "2/4/6/15" → берём максимум
+            var parts = pointsStr.Split('/');
+            int max = 0;
+            foreach (var p in parts)
+            {
+                if (int.TryParse(p.Trim(), out var v))
+                    max = Math.Max(max, v);
+            }
+            return max;
         }
-    }
 
-    public class DepartmentInfo
-    {
-        public string FullName { get; set; }
-        public string ShortName { get; set; }
-        public string HeadFullName { get; set; }
-        public string HeadTitle { get; set; }
-    }
-
-    public class SemesterInfo
-    {
-        public string Year { get; set; } = "";
-        public int Number { get; set; }
+        #endregion
     }
 }

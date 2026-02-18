@@ -24,7 +24,7 @@ namespace ASUIPP.App.Views
             Helpers.ZoomHelper.Apply(this);
 
             _dbContext = dbContext;
-            _currentTeacherId = currentTeacherId;
+            _currentTeacherId = currentTeacherId ?? "";  // null-safe
             _teacherRepo = new TeacherRepository(dbContext);
             _workRepo = new WorkRepository(dbContext);
 
@@ -124,10 +124,9 @@ namespace ASUIPP.App.Views
                 return;
             }
 
-            if (selected.TeacherId == _currentTeacherId)
+            if (!string.IsNullOrEmpty(_currentTeacherId) && selected.TeacherId == _currentTeacherId)
             {
-                MessageBox.Show("Cannot delete current user.\nSwitch to another user first.",
-                    "ASUIPP", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Cannot delete current user.", "ASUIPP");
                 return;
             }
 

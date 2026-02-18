@@ -23,26 +23,27 @@
                 <Run Text="Добро пожаловать, "/><Run Text="{Binding WelcomeName, Mode=OneWay}" FontWeight="Bold"/><Run Text="!"/>
             </TextBlock>
         </DockPanel>
-
-        <!-- Список преподавателей -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Teachers}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Button Margin="0,2" Padding="10,10" HorizontalContentAlignment="Stretch"
-                            Tag="{Binding TeacherId}"
-                            Click="TeacherButton_Click">
-                        <DockPanel>
-                            <TextBlock DockPanel.Dock="Right" FontSize="14" FontWeight="Bold"
-                                       VerticalAlignment="Center">
-                                <Run Text="Сумма балов: "/><Run Text="{Binding TotalPoints, Mode=OneWay}"/>
-                            </TextBlock>
-                            <TextBlock Text="{Binding ShortName}" FontSize="14"
-                                       VerticalAlignment="Center"/>
-                        </DockPanel>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="1">
+            <!-- Список преподавателей -->
+            <ItemsControl Grid.Row="1" ItemsSource="{Binding Teachers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Margin="0,2" Padding="10,10" HorizontalContentAlignment="Stretch"
+                                Tag="{Binding TeacherId}"
+                                Click="TeacherButton_Click">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" FontSize="14" FontWeight="Bold"
+                                           VerticalAlignment="Center">
+                                    <Run Text="Сумма балов: "/><Run Text="{Binding TotalPoints, Mode=OneWay}"/>
+                                </TextBlock>
+                                <TextBlock Text="{Binding ShortName}" FontSize="14"
+                                           VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <!-- Низ: добавить + итого -->
         <DockPanel Grid.Row="2" Margin="0,10,0,0">

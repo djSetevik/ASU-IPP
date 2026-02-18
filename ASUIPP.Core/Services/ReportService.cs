@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using ASUIPP.Core.Data;
 using ASUIPP.Core.Data.Repositories;
+using ASUIPP.Core.Helpers;
 using ASUIPP.Core.Models;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -27,9 +28,6 @@ namespace ASUIPP.Core.Services
             _settingsRepo = new SettingsRepository(dbContext);
         }
 
-        /// <summary>
-        /// Сводный отчёт по всем преподавателям кафедры.
-        /// </summary>
         public string GenerateSummaryReport(string outputPath)
         {
             var teachers = _teacherRepo.GetAll();
@@ -41,14 +39,11 @@ namespace ASUIPP.Core.Services
             {
                 var ws = package.Workbook.Worksheets.Add("Сводный отчёт");
 
-                // ── Заголовок ──
                 ws.Cells[1, 1].Value = $"Сводный отчёт по кафедре \"{settings.DepartmentName}\"";
                 ws.Cells[1, 1].Style.Font.Bold = true;
                 ws.Cells[1, 1].Style.Font.Size = 14;
-
                 ws.Cells[2, 1].Value = $"{settings.SemesterNumber}-й семестр {settings.SemesterYear} уч. года";
 
-                // ── Шапка таблицы ──
                 int headerRow = 4;
                 ws.Cells[headerRow, 1].Value = "№";
                 ws.Cells[headerRow, 2].Value = "Виды работ";
@@ -61,25 +56,19 @@ namespace ASUIPP.Core.Services
                     ws.Cells[headerRow, 4 + t].Style.Font.Size = 9;
                 }
 
-                // Стиль шапки
                 var headerRange = ws.Cells[headerRow, 1, headerRow, 3 + teachers.Count];
                 headerRange.Style.Font.Bold = true;
                 headerRange.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
                 headerRange.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
 
-                // ── Данные ──
                 int row = headerRow + 1;
 
-                // Кэшируем все работы преподавателей
                 var teacherWorks = new Dictionary<string, List<PlannedWork>>();
                 foreach (var teacher in teachers)
-                {
                     teacherWorks[teacher.TeacherId] = _workRepo.GetByTeacher(teacher.TeacherId);
-                }
 
                 foreach (var section in sections)
                 {
-                    // Заголовок раздела
                     ws.Cells[row, 1].Value = $"{section.SectionId}.";
                     ws.Cells[row, 2].Value = section.Name;
                     ws.Cells[row, 1, row, 3 + teachers.Count].Style.Font.Bold = true;
@@ -87,17 +76,16 @@ namespace ASUIPP.Core.Services
                     ws.Cells[row, 1, row, 3 + teachers.Count].Style.Fill.BackgroundColor.SetColor(
                         System.Drawing.Color.FromArgb(220, 230, 241));
 
-                    // Суммы по разделу для каждого преподавателя
                     for (int t = 0; t < teachers.Count; t++)
                     {
-                        var sectionPoints = teacherWorks[teachers[t].TeacherId]
+                        var rawPoints = teacherWorks[teachers[t].TeacherId]
                             .Where(w => w.SectionId == section.SectionId)
                             .Sum(w => w.Points);
-                        ws.Cells[row, 4 + t].Value = sectionPoints;
+                        // Лимит 50 за раздел
+                        ws.Cells[row, 4 + t].Value = Math.Min(rawPoints, PointsLimits.MaxPerSection);
                     }
                     row++;
 
-                    // Пункты раздела
                     var items = allItems.Where(wi => wi.SectionId == section.SectionId)
                         .OrderBy(wi => wi.SortOrder).ToList();
 
@@ -116,12 +104,11 @@ namespace ASUIPP.Core.Services
                             if (points != 0)
                                 ws.Cells[row, 4 + t].Value = points;
                         }
-
                         row++;
                     }
                 }
 
-                // ── Итого ──
+                // Итого с лимитом 100
                 ws.Cells[row, 2].Value = "ИТОГО";
                 ws.Cells[row, 1, row, 3 + teachers.Count].Style.Font.Bold = true;
                 ws.Cells[row, 1, row, 3 + teachers.Count].Style.Font.Size = 12;
@@ -129,11 +116,17 @@ namespace ASUIPP.Core.Services
 
                 for (int t = 0; t < teachers.Count; t++)
                 {
-                    var total = teacherWorks[teachers[t].TeacherId].Sum(w => w.Points);
-                    ws.Cells[row, 4 + t].Value = total;
+                    int totalWithLimits = 0;
+                    foreach (var section in sections)
+                    {
+                        var secSum = teacherWorks[teachers[t].TeacherId]
+                            .Where(w => w.SectionId == section.SectionId)
+                            .Sum(w => w.Points);
+                        totalWithLimits += Math.Min(secSum, PointsLimits.MaxPerSection);
+                    }
+                    ws.Cells[row, 4 + t].Value = Math.Min(totalWithLimits, PointsLimits.MaxTotal);
                 }
 
-                // ── Форматирование ──
                 ws.Column(1).Width = 6;
                 ws.Column(2).Width = 55;
                 ws.Column(3).Width = 10;
@@ -151,9 +144,6 @@ namespace ASUIPP.Core.Services
             }
         }
 
-        /// <summary>
-        /// Индивидуальный отчёт по одному преподавателю.
-        /// </summary>
         public string GeneratePersonalReport(string teacherId, string outputPath)
         {
             var teacher = _teacherRepo.GetById(teacherId);
@@ -167,15 +157,12 @@ namespace ASUIPP.Core.Services
             {
                 var ws = package.Workbook.Worksheets.Add("Индивидуальный отчёт");
 
-                // Заголовок
                 ws.Cells[1, 1].Value = $"Индивидуальный отчёт: {teacher.FullName}";
                 ws.Cells[1, 1].Style.Font.Bold = true;
                 ws.Cells[1, 1].Style.Font.Size = 14;
-
                 ws.Cells[2, 1].Value = $"Кафедра: {settings.DepartmentName}";
                 ws.Cells[3, 1].Value = $"{settings.SemesterNumber}-й семестр {settings.SemesterYear} уч. года";
 
-                // Шапка таблицы
                 int headerRow = 5;
                 string[] headers = { "Раздел", "Пункт", "Название работы", "Баллы", "Статус", "Дата", "Файлы" };
                 for (int c = 0; c < headers.Length; c++)
@@ -190,6 +177,7 @@ namespace ASUIPP.Core.Services
                 headerRange.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
 
                 int row = headerRow + 1;
+                int grandTotal = 0;
 
                 foreach (var section in sections)
                 {
@@ -198,7 +186,6 @@ namespace ASUIPP.Core.Services
 
                     if (!sectionWorks.Any()) continue;
 
-                    // Заголовок раздела
                     ws.Cells[row, 1].Value = $"{section.SectionId}. {section.Name}";
                     ws.Cells[row, 1].Style.Font.Bold = true;
                     ws.Cells[row, 1, row, headers.Length].Merge = true;
@@ -206,8 +193,14 @@ namespace ASUIPP.Core.Services
                     ws.Cells[row, 1, row, headers.Length].Style.Fill.BackgroundColor.SetColor(
                         System.Drawing.Color.FromArgb(240, 240, 240));
 
-                    var sectionTotal = sectionWorks.Sum(w => w.Points);
-                    ws.Cells[row, headers.Length].Value = sectionTotal;
+                    var rawSectionTotal = sectionWorks.Sum(w => w.Points);
+                    var sectionTotal = Math.Min(rawSectionTotal, PointsLimits.MaxPerSection);
+                    grandTotal += sectionTotal;
+
+                    // Показываем с пометкой если превышен лимит
+                    ws.Cells[row, headers.Length].Value = rawSectionTotal > PointsLimits.MaxPerSection
+                        ? $"{sectionTotal} (из {rawSectionTotal})"
+                        : sectionTotal.ToString();
                     row++;
 
                     foreach (var work in sectionWorks)
@@ -222,20 +215,19 @@ namespace ASUIPP.Core.Services
                         ws.Cells[row, 6].Value = work.DueDate?.ToString("dd.MM.yyyy") ?? "";
                         ws.Cells[row, 7].Value = string.Join(", ",
                             work.AttachedFiles.Select(f => f.FileName));
-
                         row++;
                     }
                 }
 
-                // Итого
+                // Итого с лимитом
+                grandTotal = Math.Min(grandTotal, PointsLimits.MaxTotal);
                 ws.Cells[row, 3].Value = "ИТОГО";
                 ws.Cells[row, 3].Style.Font.Bold = true;
-                ws.Cells[row, 4].Value = works.Sum(w => w.Points);
+                ws.Cells[row, 4].Value = grandTotal;
                 ws.Cells[row, 4].Style.Font.Bold = true;
                 ws.Cells[row, 4].Style.Font.Size = 12;
                 ws.Cells[row, 1, row, headers.Length].Style.Border.Top.Style = ExcelBorderStyle.Double;
 
-                // Ширины
                 ws.Column(1).Width = 12;
                 ws.Column(2).Width = 8;
                 ws.Column(3).Width = 50;
@@ -263,7 +255,6 @@ namespace ASUIPP.Core.Services
                 case WorkStatus.InProgress: return "Выполняется";
                 case WorkStatus.Done: return "Ожидает подтверждения";
                 case WorkStatus.Confirmed: return "Подтверждена";
-                case WorkStatus.Reported: return "Учтена в отчёте";
                 default: return status.ToString();
             }
         }

@@ -130,13 +130,15 @@ namespace ASUIPP.App
 
         public void ShowSetupWindow()
         {
-            var window = new SetupWindow(_dbContext);
-            window.SetupCompleted += () =>
+            var setup = new SetupWindow(_dbContext);
+            if (setup.ShowDialog() == true)
             {
-                window.Close();
                 ShowMainWindow();
-            };
-            window.Show();
+            }
+            else
+            {
+                Shutdown();
+            }
         }
 
         public void ShowMainWindow()

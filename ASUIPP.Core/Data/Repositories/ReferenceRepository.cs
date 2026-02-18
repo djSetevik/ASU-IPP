@@ -22,6 +22,13 @@ namespace ASUIPP.Core.Data.Repositories
             ).ToList();
         }
 
+        public void InsertOrUpdate(Section section)
+        {
+            var db = _context.GetConnection();
+            db.Execute(@"INSERT OR REPLACE INTO Sections (SectionId, Name, SortOrder)
+                 VALUES (@SectionId, @Name, @SortOrder)", section);
+        }
+
         public void InsertSection(Section section)
         {
             var db = _context.GetConnection();
@@ -66,6 +73,14 @@ namespace ASUIPP.Core.Data.Repositories
                 INSERT OR REPLACE INTO WorkItems
                 (SectionId, ItemId, Name, MaxPoints, MaxPointsNumeric, SortOrder)
                 VALUES (@SectionId, @ItemId, @Name, @MaxPoints, @MaxPointsNumeric, @SortOrder)", item);
+        }
+
+        public Section GetSection(int sectionId)
+        {
+            var db = _context.GetConnection();
+            return db.QueryFirstOrDefault<Section>(
+                "SELECT SectionId, Name, SortOrder FROM Sections WHERE SectionId = @SectionId",
+                new { SectionId = sectionId });
         }
 
         public void ClearAll()

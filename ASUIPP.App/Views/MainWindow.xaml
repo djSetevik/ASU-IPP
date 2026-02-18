@@ -52,17 +52,6 @@
             <Border DockPanel.Dock="Top" Background="#C0C0C0" Padding="5,3"
                     BorderBrush="#808080" BorderThickness="0,0,0,1">
                 <DockPanel>
-                    <!-- Период -->
-                    <StackPanel x:Name="PeriodPanel" DockPanel.Dock="Right" Orientation="Horizontal"
-                                VerticalAlignment="Center" Margin="0,0,15,0">
-                        <TextBlock Text="Период:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
-                        <ComboBox x:Name="PeriodCombo" Width="200" FontSize="11"
-                                  DisplayMemberPath="DisplayName"
-                                  SelectedValuePath="PeriodId"
-                                  SelectionChanged="PeriodCombo_Changed"/>
-                        <Button Content="+" Width="24" Height="22" Padding="0" Margin="3,0,0,0"
-                                Click="AddPeriod_Click" FontSize="12" ToolTip="Добавить период"/>
-                    </StackPanel>
                     <!-- Масштаб справа -->
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Масштаб:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
@@ -103,9 +92,13 @@
             </Border>
             <!-- Статусбар -->
             <Border DockPanel.Dock="Bottom" Background="#C0C0C0" Height="22"
-                    BorderBrush="#808080" BorderThickness="0,1,0,0">
-                <TextBlock x:Name="StatusText" Text="Готово" VerticalAlignment="Center"
-                           Margin="4,0" FontSize="11" Foreground="#404040"/>
+        BorderBrush="#808080" BorderThickness="0,1,0,0">
+                <DockPanel Margin="4,0">
+                    <TextBlock DockPanel.Dock="Right" Text="СГУПС • dj mostovik • поручик • лэщ"
+                   VerticalAlignment="Center" FontSize="9" Foreground="#A0A0A0"/>
+                    <TextBlock x:Name="StatusText" Text="Готово" VerticalAlignment="Center"
+                   FontSize="11" Foreground="#404040"/>
+                </DockPanel>
             </Border>
 
             <!-- Контент — растягивается на всё доступное пространство -->

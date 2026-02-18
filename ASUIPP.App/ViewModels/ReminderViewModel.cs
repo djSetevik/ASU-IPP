@@ -71,13 +71,11 @@ namespace ASUIPP.App.ViewModels
         public void LoadData()
         {
             var workRepo = new WorkRepository(_dbContext);
-
-            // Все работы со статусом Planned или InProgress у которых есть дата
             var upcoming = workRepo.GetUpcomingByTeacher(_teacherId, 365);
             var overdue = workRepo.GetOverdueByTeacher(_teacherId);
 
-            // Объединяем, убираем дубли, сортируем
             var all = overdue.Concat(upcoming)
+                .Where(w => w.Status != WorkStatus.Confirmed) // не показываем подтверждённые
                 .GroupBy(w => w.WorkId)
                 .Select(g => g.First())
                 .OrderBy(w => w.DueDate)

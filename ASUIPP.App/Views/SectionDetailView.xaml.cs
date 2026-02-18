@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using System;
+using System.Windows.Controls;
 
 namespace ASUIPP.App.Views
 {
@@ -9,15 +10,28 @@ namespace ASUIPP.App.Views
             InitializeComponent();
         }
 
+        private bool _isUpdating;
+
         private void StatusCombo_Changed(object sender, SelectionChangedEventArgs e)
         {
-            if (sender is ComboBox combo
-                && combo.Tag is ASUIPP.Core.Models.PlannedWork work
-                && combo.SelectedValue is ASUIPP.Core.Models.WorkStatus newStatus
-                && newStatus != work.Status)
+            if (_isUpdating) return;
+            if (e.AddedItems.Count == 0) return;
+            if (!(sender is ComboBox combo)) return;
+            if (!(combo.Tag is Core.Models.PlannedWork work)) return;
+            if (!(combo.SelectedValue is Core.Models.WorkStatus newStatus)) return;
+            if (newStatus == work.Status) return;
+
+            _isUpdating = true;
+            try
             {
                 var vm = DataContext as ViewModels.SectionDetailViewModel;
                 vm?.ChangeWorkStatus(work.WorkId, newStatus);
+            }
+            finally
+            {
+                // Даём UI обновиться перед снятием флага
+                Dispatcher.BeginInvoke(new Action(() => _isUpdating = false),
+                    System.Windows.Threading.DispatcherPriority.Background);
             }
         }
     }

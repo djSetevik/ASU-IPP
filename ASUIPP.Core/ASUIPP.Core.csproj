@@ -134,8 +134,10 @@
     <Compile Include="Data\Repositories\ITeacherRepository.cs" />
     <Compile Include="Data\Repositories\IWorkRepository.cs" />
     <Compile Include="Data\Repositories\ReferenceRepository.cs" />
+    <Compile Include="Data\Repositories\SectionRepository.cs" />
     <Compile Include="Data\Repositories\SettingsRepository.cs" />
     <Compile Include="Data\Repositories\TeacherRepository.cs" />
+    <Compile Include="Data\Repositories\WorkItemRepository.cs" />
     <Compile Include="Data\Repositories\WorkRepository.cs" />
     <Compile Include="Helpers\FileHelper.cs" />
     <Compile Include="Helpers\NameHelper.cs" />

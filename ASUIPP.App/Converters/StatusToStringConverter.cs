@@ -17,7 +17,6 @@ namespace ASUIPP.App.Converters
                     case WorkStatus.InProgress: return "Выполняется";
                     case WorkStatus.Done: return "Ожидает подтверждения";
                     case WorkStatus.Confirmed: return "Подтверждена";
-                    case WorkStatus.Reported: return "Учтена в отчёте";
                 }
             }
             return value?.ToString() ?? "";

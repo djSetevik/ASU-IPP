@@ -29,17 +29,18 @@
 
         <!-- Таблица работ -->
         <DataGrid Grid.Row="1"
-                  ItemsSource="{Binding Works}"
-                  AutoGenerateColumns="False"
-                  CanUserAddRows="False" CanUserDeleteRows="False"
-                  IsReadOnly="True" SelectionMode="Single"
-                  HeadersVisibility="Column"
-                  VerticalScrollBarVisibility="Auto">
+              ItemsSource="{Binding Works}"
+              AutoGenerateColumns="False"
+              CanUserAddRows="False" CanUserDeleteRows="False"
+              IsReadOnly="False"
+              SelectionMode="Single"
+              HeadersVisibility="Column"
+              VerticalScrollBarVisibility="Auto">
 
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Название работы" Binding="{Binding WorkName}" Width="*"/>
+                <DataGridTextColumn Header="Название работы" Binding="{Binding WorkName}" Width="*" IsReadOnly="True"/>
 
-                <DataGridTextColumn Header="Пункт раздела" Width="160">
+                <DataGridTextColumn Header="Пункт раздела" Width="160" IsReadOnly="True">
                     <DataGridTextColumn.Binding>
                         <MultiBinding StringFormat="{}{0} {1}">
                             <Binding Path="WorkItem.DisplayId" FallbackValue=""/>
@@ -48,20 +49,20 @@
                     </DataGridTextColumn.Binding>
                 </DataGridTextColumn>
 
-                <DataGridTextColumn Header="Дата окончания" Width="110"
-                                    Binding="{Binding DueDate, StringFormat=dd.MM.yyyy}"/>
+                <DataGridTextColumn Header="Дата окончания" Width="110" IsReadOnly="True"
+                    Binding="{Binding DueDate, StringFormat=dd.MM.yyyy}"/>
 
                 <DataGridTemplateColumn Header="Статус" Width="160">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox ItemsSource="{Binding DataContext.StatusOptions,
-                                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                      DisplayMemberPath="DisplayName"
-                                      SelectedValuePath="Value"
-                                      SelectedValue="{Binding Status, UpdateSourceTrigger=PropertyChanged}"
-                                      BorderThickness="0" Background="Transparent"
-                                      Tag="{Binding}"
-                                      SelectionChanged="StatusCombo_Changed"/>
+                                    RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="Value"
+                      SelectedValue="{Binding Status, Mode=OneWay}"
+                      BorderThickness="0" Background="Transparent"
+                      Tag="{Binding}"
+                      SelectionChanged="StatusCombo_Changed"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
@@ -92,8 +93,8 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="Баллы" Width="60"
-                                    Binding="{Binding Points}"/>
+                <DataGridTextColumn Header="Баллы" Width="60" IsReadOnly="True"
+                    Binding="{Binding Points}"/>
 
                 <DataGridTemplateColumn Header="" Width="40">
                     <DataGridTemplateColumn.CellTemplate>

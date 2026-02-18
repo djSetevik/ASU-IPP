@@ -4,6 +4,7 @@ using System.Linq;
 using ASUIPP.App.Helpers;
 using ASUIPP.Core.Data;
 using ASUIPP.Core.Data.Repositories;
+using ASUIPP.Core.Helpers;
 using ASUIPP.Core.Models;
 
 namespace ASUIPP.App.ViewModels
@@ -11,7 +12,9 @@ namespace ASUIPP.App.ViewModels
     public class TeacherListItem : ViewModelBase
     {
         public string TeacherId { get; set; }
+        public string FullName { get; set; }
         public string ShortName { get; set; }
+        public bool IsHead { get; set; }
 
         private int _totalPoints;
         public int TotalPoints
@@ -62,7 +65,7 @@ namespace ASUIPP.App.ViewModels
             _workRepo = new WorkRepository(dbContext);
 
             var current = _teacherRepo.GetById(_currentTeacherId);
-            WelcomeName = current?.FullName ?? "Пользователь";
+            WelcomeName = current?.FullName ?? current?.ShortName ?? "";
 
             GoToTeacherWorkCommand = new RelayCommand(() => GoToTeacherWorkRequested?.Invoke());
 
@@ -103,35 +106,50 @@ namespace ASUIPP.App.ViewModels
             });
 
             ImportArchivesCommand = new RelayCommand(() => ImportRequested?.Invoke());
-
             AddTeacherCommand = new RelayCommand(AddTeacher);
 
-            LoadData();
+            LoadTeachers();
         }
 
-        public void LoadData()
+        public void LoadTeachers()
         {
             var teachers = _teacherRepo.GetAll();
+            var refRepo = new ReferenceRepository(_dbContext);
+            var sections = refRepo.GetAllSections();
 
             Teachers.Clear();
+            int grandTotal = 0;
+
             foreach (var t in teachers)
             {
+                var works = _workRepo.GetByTeacher(t.TeacherId);
+
+                int total = 0;
+                foreach (var sec in sections)
+                {
+                    var secSum = works.Where(w => w.SectionId == sec.SectionId).Sum(w => w.Points);
+                    total += Math.Min(secSum, PointsLimits.MaxPerSection);
+                }
+                total = Math.Min(total, PointsLimits.MaxTotal);
+
                 Teachers.Add(new TeacherListItem
                 {
                     TeacherId = t.TeacherId,
+                    FullName = t.FullName,
                     ShortName = t.ShortName,
-                    TotalPoints = _workRepo.GetTotalPointsByTeacher(t.TeacherId)
+                    IsHead = t.IsHead,
+                    TotalPoints = total
                 });
+
+                grandTotal += total;
             }
 
-            GrandTotal = Teachers.Sum(t => t.TotalPoints);
+            GrandTotal = grandTotal;
         }
 
         public void Refresh()
         {
-            foreach (var t in Teachers)
-                t.TotalPoints = _workRepo.GetTotalPointsByTeacher(t.TeacherId);
-            GrandTotal = Teachers.Sum(t => t.TotalPoints);
+            LoadTeachers();
         }
 
         private void AddTeacher()
@@ -141,12 +159,14 @@ namespace ASUIPP.App.ViewModels
             {
                 var teacher = new Teacher
                 {
+                    TeacherId = Guid.NewGuid().ToString(),
                     FullName = dialog.TeacherFullName,
-                    ShortName = Core.Helpers.FileHelper.ToShortName(dialog.TeacherFullName),
-                    IsHead = false
+                    ShortName = NameHelper.ToShortName(dialog.TeacherFullName),
+                    IsHead = false,
+                    CreatedAt = DateTime.Now
                 };
                 _teacherRepo.Insert(teacher);
-                LoadData();
+                LoadTeachers();
             }
         }
 

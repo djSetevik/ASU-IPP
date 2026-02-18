@@ -2,10 +2,9 @@
 {
     public enum WorkStatus
     {
-        Planned = 0,        // Запланирована
-        InProgress = 1,     // Выполняется
-        Done = 2,           // Выполнена (ожидает подтверждения)
-        Confirmed = 3,      // Подтверждена заведующим
-        Reported = 4        // Учтена в отчёте
+        Planned = 0,
+        InProgress = 1,
+        Done = 2,
+        Confirmed = 3
     }
 }

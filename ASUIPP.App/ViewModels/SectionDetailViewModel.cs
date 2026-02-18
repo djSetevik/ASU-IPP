@@ -23,7 +23,6 @@ namespace ASUIPP.App.ViewModels
         private readonly int _sectionId;
         private readonly WorkRepository _workRepo;
         private readonly ReferenceRepository _refRepo;
-        private readonly int _periodId;
         // Добавьте в начало класса вместе с остальными свойствами:
 
         public List<StatusOption> StatusOptions { get; } = new List<StatusOption>
@@ -31,8 +30,7 @@ namespace ASUIPP.App.ViewModels
             new StatusOption { Value = WorkStatus.Planned, DisplayName = "Запланирована" },
             new StatusOption { Value = WorkStatus.InProgress, DisplayName = "Выполняется" },
             new StatusOption { Value = WorkStatus.Done, DisplayName = "Ожидает подтверждения" },
-            new StatusOption { Value = WorkStatus.Confirmed, DisplayName = "Подтверждена" },
-            new StatusOption { Value = WorkStatus.Reported, DisplayName = "Учтена в отчёте" }
+            new StatusOption { Value = WorkStatus.Confirmed, DisplayName = "Подтверждена" }
         };
 
         // Публичный метод для вызова из code-behind:
@@ -81,12 +79,13 @@ namespace ASUIPP.App.ViewModels
         public event Action GoBackRequested;
         public event Action AddWorkRequested;
 
-        public SectionDetailViewModel(DatabaseContext dbContext, string teacherId, int sectionId, int periodId)
+        private readonly HashSet<string> _openedFolders = new HashSet<string>();
+
+        public SectionDetailViewModel(DatabaseContext dbContext, string teacherId, int sectionId)
         {
             _dbContext = dbContext;
             _teacherId = teacherId;
             _sectionId = sectionId;
-            _periodId = periodId;
             _workRepo = new WorkRepository(dbContext);
             _workRepo = new WorkRepository(dbContext);
             _refRepo = new ReferenceRepository(dbContext);
@@ -131,7 +130,6 @@ namespace ASUIPP.App.ViewModels
                     case WorkStatus.Planned: next = WorkStatus.InProgress; break;
                     case WorkStatus.InProgress: next = WorkStatus.Done; break;
                     case WorkStatus.Done: next = WorkStatus.Confirmed; break;
-                    case WorkStatus.Confirmed: next = WorkStatus.Reported; break;
                     default: next = WorkStatus.Planned; break;
                 }
 
@@ -159,8 +157,39 @@ namespace ASUIPP.App.ViewModels
             {
                 if (work == null) return;
                 var dir = FileHelper.GetWorkFilesDir(_teacherId, work.WorkId);
-                if (System.IO.Directory.Exists(dir))
-                    System.Diagnostics.Process.Start("explorer.exe", dir);
+                if (!System.IO.Directory.Exists(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+
+                var normalizedDir = System.IO.Path.GetFullPath(dir).TrimEnd('\\');
+
+                // Ищем уже открытое окно проводника через Shell
+                try
+                {
+                    var shellType = Type.GetTypeFromProgID("Shell.Application");
+                    dynamic shell = Activator.CreateInstance(shellType);
+                    foreach (dynamic window in shell.Windows())
+                    {
+                        try
+                        {
+                            string path = new Uri(window.LocationURL).LocalPath;
+                            if (string.Equals(path.TrimEnd('\\'), normalizedDir, StringComparison.OrdinalIgnoreCase))
+                            {
+                                // Уже открыто — активируем
+                                window.Visible = true;
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(window);
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+                                return;
+                            }
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(window);
+                        }
+                        catch { }
+                    }
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(shell);
+                }
+                catch { }
+
+                // Не найдено — открываем новое
+                System.Diagnostics.Process.Start("explorer.exe", dir);
             });
 
             CreateReportCommand = new RelayCommand(() =>
@@ -180,13 +209,13 @@ namespace ASUIPP.App.ViewModels
         }
         public string ValidatePoints(int points, string excludeWorkId = null)
         {
-            var allWorks = _workRepo.GetByTeacherAndPeriod(_teacherId, _periodId);
+            var allWorks = _workRepo.GetByTeacher(_teacherId);
             return PointsLimits.Validate(points, _sectionId, excludeWorkId, allWorks);
         }
 
         public void LoadData()
         {
-            var works = _workRepo.GetByTeacherSectionAndPeriod(_teacherId, _sectionId, _periodId);
+            var works = _workRepo.GetByTeacherAndSection(_teacherId, _sectionId);
             var sections = _refRepo.GetAllSections();
             var section = sections.FirstOrDefault(s => s.SectionId == _sectionId);
             SectionName = section != null ? $"{section.SectionId}. {section.Name}" : "Раздел";
@@ -206,7 +235,7 @@ namespace ASUIPP.App.ViewModels
                 Core.Helpers.PointsLimits.MaxPerSection);
 
             // Общий итого
-            var allWorks = _workRepo.GetByTeacherAndPeriod(_teacherId, _periodId);
+            var allWorks = _workRepo.GetByTeacher(_teacherId);
             var refRepo = new ReferenceRepository(_dbContext);
             var sectionIds = refRepo.GetAllSections().Select(s => s.SectionId).ToList();
             GrandTotal = Core.Helpers.PointsLimits.EffectiveTotal(allWorks, sectionIds);
@@ -214,13 +243,7 @@ namespace ASUIPP.App.ViewModels
 
         public void AddWork(WorkItem item, string workName, int points, DateTime? dueDate)
         {
-            var error = ValidatePoints(points);
-            if (error != null)
-            {
-                System.Windows.MessageBox.Show(error, "Ограничение баллов",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                return;
-            }
+            // Убрали ValidatePoints — баллы можно ставить любые
             var work = new PlannedWork
             {
                 TeacherId = _teacherId,
@@ -230,12 +253,17 @@ namespace ASUIPP.App.ViewModels
                 Points = points,
                 DueDate = dueDate,
                 Status = WorkStatus.Planned,
-                PeriodId = _periodId
             };
 
             _workRepo.Insert(work);
             LoadData();
         }
+
+        public List<string> GetUsedItemIds()
+        {
+            return Works.Select(w => w.ItemId).ToList();
+        }
+
         public void UpdateWork(string workId, string workName, int points,
             DateTime? dueDate, WorkStatus status, WorkItem newItem)
         {

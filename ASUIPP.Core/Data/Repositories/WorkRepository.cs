@@ -204,6 +204,12 @@ namespace ASUIPP.Core.Data.Repositories
                 "SELECT * FROM PlannedWorks WHERE TeacherId = @TeacherId AND SectionId = @SectionId AND (PeriodId = @PeriodId OR PeriodId = 0)",
                 new { TeacherId = teacherId, SectionId = sectionId, PeriodId = periodId }).ToList();
         }
+        public void InsertOrUpdate(WorkItem item)
+        {
+            var db = _context.GetConnection();
+            db.Execute(@"INSERT OR REPLACE INTO WorkItems (SectionId, ItemId, Name, MaxPoints, MaxPointsNumeric, SortOrder)
+                 VALUES (@SectionId, @ItemId, @Name, @MaxPoints, @MaxPointsNumeric, @SortOrder)", item);
+        }
 
         // ── Вспомогательные ────────────────────────────────────
         //уээээээээуэуэуээуэуэуэуэуэуэуэ

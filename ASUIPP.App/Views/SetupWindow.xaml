@@ -1,18 +1,19 @@
 ﻿<Window x:Class="ASUIPP.App.Views.SetupWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="АСУИПП — Первоначальная настройка"
-        Width="550" Height="500"
-        WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
+        Title="АСУИПП — Первоначальная настройка" Width="600" Height="400"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         Background="#C0C0C0">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Resources/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
 
-    <Grid Margin="20">
+    <Grid Margin="25">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -23,67 +24,27 @@
 
         <!-- Заголовок -->
         <TextBlock Grid.Row="0" Text="Первоначальная настройка АСУИПП"
-                   FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
 
-        <!-- Шаг 1: Excel -->
-        <TextBlock Grid.Row="1" Text="1. Загрузите файл Excel с показателями:" Margin="0,0,0,5"/>
+        <!-- Шаг 1: Загрузка Excel -->
+        <TextBlock Grid.Row="1" Text="1. Загрузите файл Excel с показателями:"
+                   FontSize="14" Margin="0,0,0,8"/>
 
-        <DockPanel Grid.Row="2" Margin="0,0,0,10">
-            <Button DockPanel.Dock="Right" Content="Обзор..." Width="80" Margin="10,0,0,0"
+        <DockPanel Grid.Row="2" Margin="0,0,0,15">
+            <Button DockPanel.Dock="Right" Content="Обзор..." Padding="15,5" Margin="10,0,0,0"
                     Command="{Binding BrowseExcelCommand}"/>
-            <TextBox IsReadOnly="True"
-                     Text="{Binding ExcelFilePath, Mode=OneWay}"
-                     VerticalContentAlignment="Center"
-                     Padding="5,3"/>
+            <TextBox Text="{Binding ExcelFilePath, Mode=OneWay}" IsReadOnly="True"
+                     Padding="5,5" Background="#E0E0E0"/>
         </DockPanel>
 
-        <!-- Семестр -->
-        <TextBlock Grid.Row="3"
-                   Text="{Binding SemesterDisplay}"
-                   FontStyle="Italic" Margin="0,0,0,10"
-                   Visibility="{Binding IsExcelLoaded, Converter={StaticResource BoolToVisibility}}"/>
-
-        <!-- Шаг 2: Кафедра -->
-        <TextBlock Grid.Row="4" Text="2. Выберите кафедру:" Margin="0,0,0,5"
-                   Visibility="{Binding IsExcelLoaded, Converter={StaticResource BoolToVisibility}}"/>
-
-        <ComboBox Grid.Row="5" Margin="0,0,0,10"
-                  ItemsSource="{Binding Departments}"
-                  SelectedItem="{Binding SelectedDepartment}"
-                  DisplayMemberPath="FullName"
-                  Visibility="{Binding IsExcelLoaded, Converter={StaticResource BoolToVisibility}}"/>
-
-        <!-- Шаг 3: ФИО и роль -->
-        <StackPanel Grid.Row="6" Margin="0,0,0,10"
-                    Visibility="{Binding IsExcelLoaded, Converter={StaticResource BoolToVisibility}}">
-
-            <TextBlock Text="3. Ваши данные:" Margin="0,0,0,5"/>
-
-            <DockPanel Margin="0,0,0,8">
-                <TextBlock DockPanel.Dock="Left" Text="ФИО:" Width="60" VerticalAlignment="Center"/>
-                <TextBox Text="{Binding FullName, UpdateSourceTrigger=PropertyChanged}"
-                         Padding="5,3"/>
-            </DockPanel>
-
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                <TextBlock Text="Роль:" Width="60" VerticalAlignment="Center"/>
-                <RadioButton Content="Преподаватель"
-                             IsChecked="{Binding IsHead, Converter={StaticResource InvertBool}}"
-                             Margin="0,0,15,0" VerticalAlignment="Center"/>
-                <RadioButton Content="Заведующий кафедрой"
-                             IsChecked="{Binding IsHead}"
-                             VerticalAlignment="Center"/>
-            </StackPanel>
-        </StackPanel>
-
         <!-- Статус -->
-        <TextBlock Grid.Row="8" Text="{Binding StatusText}"
-                   Foreground="Gray" Margin="0,10,0,10" TextWrapping="Wrap"/>
+        <TextBlock Grid.Row="4" Text="{Binding StatusText}" FontSize="12"
+                   Foreground="Gray" TextWrapping="Wrap" Margin="0,0,0,15"/>
 
-        <!-- Кнопка -->
-        <Button Grid.Row="9" Content="Начать работу"
-                Height="35" FontSize="14"
+        <!-- Кнопка "Начать работу" -->
+        <Button Grid.Row="5" Content="Начать работу" HorizontalAlignment="Right"
+                Padding="25,8" FontSize="14"
                 Command="{Binding FinishCommand}"
-                HorizontalAlignment="Right" Width="150"/>
+                IsEnabled="{Binding CanFinish}"/>
     </Grid>
 </Window>

@@ -18,7 +18,6 @@ namespace ASUIPP.App.Converters
                     case WorkStatus.InProgress: return new SolidColorBrush(Color.FromRgb(0, 100, 200)); // синий
                     case WorkStatus.Done: return new SolidColorBrush(Color.FromRgb(200, 150, 0)); // жёлтый
                     case WorkStatus.Confirmed: return new SolidColorBrush(Color.FromRgb(0, 150, 0)); // зелёный
-                    case WorkStatus.Reported: return new SolidColorBrush(Color.FromRgb(100, 100, 100)); // тёмно-серый
                 }
             }
             return Brushes.Black;

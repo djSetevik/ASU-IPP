@@ -23,14 +23,12 @@ namespace ASUIPP.App.Views
         private readonly List<PlannedWork> _allWorks;
         private readonly int _sectionId;
 
-        public EditWorkWindow(PlannedWork work, WorkItem currentWorkItem,
-            List<WorkItem> allSectionItems, List<PlannedWork> allTeacherWorks)
+        public EditWorkWindow(PlannedWork work, WorkItem currentWorkItem, List<WorkItem> allSectionItems)
         {
             InitializeComponent();
             Helpers.ZoomHelper.Apply(this);
 
             _work = work;
-            _allWorks = allTeacherWorks;
             _sectionId = work.SectionId;
 
             // Список пунктов
@@ -65,8 +63,7 @@ namespace ASUIPP.App.Views
                 new StatusOption { Value = WorkStatus.Planned, DisplayName = "Запланирована" },
                 new StatusOption { Value = WorkStatus.InProgress, DisplayName = "Выполняется" },
                 new StatusOption { Value = WorkStatus.Done, DisplayName = "Ожидает подтверждения" },
-                new StatusOption { Value = WorkStatus.Confirmed, DisplayName = "Подтверждена" },
-                new StatusOption { Value = WorkStatus.Reported, DisplayName = "Учтена в отчёте" }
+                new StatusOption { Value = WorkStatus.Confirmed, DisplayName = "Подтверждена" }
             };
             StatusCombo.SelectedValue = work.Status;
         }
@@ -126,15 +123,6 @@ namespace ASUIPP.App.Views
             int targetSectionId = _sectionId;
             if (selectedItem != null)
                 targetSectionId = selectedItem.SectionId;
-
-            var error = Core.Helpers.PointsLimits.Validate(
-                points, targetSectionId, _work.WorkId, _allWorks);
-            if (error != null)
-            {
-                MessageBox.Show(error, "Ограничение баллов",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
 
             EditedWorkName = WorkNameBox.Text.Trim();
             EditedPoints = points;
