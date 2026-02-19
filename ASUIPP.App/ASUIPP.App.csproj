@@ -187,9 +187,6 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="ASUIPP_Manual.docx">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -223,14 +220,23 @@
   <ItemGroup>
     <Resource Include="Resources\Icons\edit.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="ASUIPP_Manual.docx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\System.Data.SQLite.Core.1.0.118.0\build\net46\System.Data.SQLite.Core.targets" Condition="Exists('..\packages\System.Data.SQLite.Core.1.0.118.0\build\net46\System.Data.SQLite.Core.targets')" />
-  <Target Name="CopySQLiteInterop" AfterTargets="Build">
-    <ItemGroup>
-      <SQLiteX86 Include="..\packages\System.Data.SQLite.Core.*\build\**\x86\SQLite.Interop.dll" />
-      <SQLiteX64 Include="..\packages\System.Data.SQLite.Core.*\build\**\x64\SQLite.Interop.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(SQLiteX86)" DestinationFolder="$(OutputPath)x86\" SkipUnchangedFiles="true" Condition="'@(SQLiteX86)' != ''" />
-    <Copy SourceFiles="@(SQLiteX64)" DestinationFolder="$(OutputPath)x64\" SkipUnchangedFiles="true" Condition="'@(SQLiteX64)' != ''" />
-  </Target>
+<Target Name="CopySQLiteInterop" AfterTargets="Build">
+  <MakeDir Directories="$(OutputPath)x86" Condition="!Exists('$(OutputPath)x86')" />
+  <MakeDir Directories="$(OutputPath)x64" Condition="!Exists('$(OutputPath)x64')" />
+  <Copy SourceFiles="..\ASUIPP.Core\bin\$(Configuration)\x86\SQLite.Interop.dll"
+        DestinationFolder="$(OutputPath)x86\"
+        SkipUnchangedFiles="true"
+        Condition="Exists('..\ASUIPP.Core\bin\$(Configuration)\x86\SQLite.Interop.dll')" />
+  <Copy SourceFiles="..\ASUIPP.Core\bin\$(Configuration)\x64\SQLite.Interop.dll"
+        DestinationFolder="$(OutputPath)x64\"
+        SkipUnchangedFiles="true"
+        Condition="Exists('..\ASUIPP.Core\bin\$(Configuration)\x64\SQLite.Interop.dll')" />
+</Target>
 </Project>
