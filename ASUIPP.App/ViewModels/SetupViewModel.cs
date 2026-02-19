@@ -126,9 +126,9 @@ namespace ASUIPP.App.ViewModels
                     _settingsRepo.Set("ReferenceFilePath", ExcelFilePath ?? "");
 
                     if (!string.IsNullOrEmpty(_importResult?.Year))
-                        _settingsRepo.Set("Year", _importResult.Year);
+                        _settingsRepo.Set("SemesterYear", _importResult.Year);
                     if (!string.IsNullOrEmpty(_importResult?.Semester))
-                        _settingsRepo.Set("Semester", _importResult.Semester);
+                        _settingsRepo.Set("SemesterNumber", _importResult.Semester);
 
                     // Обновляем IsHead у выбранного преподавателя
                     var teacher = _teacherRepo.GetById(switchWindow.SelectedTeacherId);

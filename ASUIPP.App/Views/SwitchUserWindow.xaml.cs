@@ -41,7 +41,7 @@ namespace ASUIPP.App.Views
                     TeacherId = t.TeacherId,
                     FullName = t.FullName,
                     IsHead = t.IsHead,
-                    RoleText = t.IsHead ? "(zavkaf)" : "",
+                    RoleText = t.IsHead ? "(ЗавКаф.)" : "",
                     IsCurrent = t.TeacherId == _currentTeacherId
                 })
             );
@@ -75,7 +75,7 @@ namespace ASUIPP.App.Views
                 if (existing != null)
                 {
                     MessageBox.Show(
-                        $"Head is already assigned: {existing.FullName}.\nOnly one user can be head.",
+                        $"Руководитель уже назначен: {existing.FullName}.\nРуководителем может быть только один пользователь..",
                         "ASUIPP", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }

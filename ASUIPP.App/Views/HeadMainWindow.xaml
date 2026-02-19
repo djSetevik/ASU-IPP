@@ -51,7 +51,7 @@
                     Command="{Binding AddTeacherCommand}" ToolTip="Добавить преподавателя"/>
             <Border DockPanel.Dock="Right" BorderBrush="Black" BorderThickness="0,2,0,0" Padding="10,8">
                 <TextBlock HorizontalAlignment="Right" FontSize="16" FontWeight="Bold">
-                    <Run Text="ИТОГО Сумма балов: "/><Run Text="{Binding GrandTotal, Mode=OneWay}"/>
+                    <Run Text="Средний балл: "/><Run Text="{Binding AveragePoints, Mode=OneWay}"/>
                 </TextBlock>
             </Border>
         </DockPanel>

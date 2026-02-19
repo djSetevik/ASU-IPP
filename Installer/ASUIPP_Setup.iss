@@ -5,8 +5,8 @@
 
 #define MyAppName "АСУИПП"
 #define MyAppNameEn "ASUIPP"
-#define MyAppVersion "1.0.2"
-#define MyAppPublisher "СГУПС"
+#define MyAppVersion "1.0.5"
+#define MyAppPublisher "dj mostovik & co"
 #define MyAppExeName "ASUIPP.App.exe"
 #define MyAppDescription "Автоматизированная система учёта индивидуальных показателей работы преподавателя"
 #define BuildOutput "..\ASUIPP.App\bin\Release"

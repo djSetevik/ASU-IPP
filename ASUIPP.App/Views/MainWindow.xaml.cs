@@ -262,6 +262,31 @@ namespace ASUIPP.App.Views
             catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}", "ASUIPP"); }
         }
 
+        private void Help_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var helpPath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "ASUIPP_Manual.docx");
+
+                if (!System.IO.File.Exists(helpPath))
+                {
+                    MessageBox.Show("Файл справки не найден.\nОжидается: " + helpPath, "АСУИПП");
+                    return;
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = helpPath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Не удалось открыть справку: {ex.Message}", "АСУИПП");
+            }
+        }
+
         private void Export_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentViewTeacherId)) return;

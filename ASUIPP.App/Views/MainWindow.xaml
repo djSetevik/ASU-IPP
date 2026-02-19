@@ -41,10 +41,12 @@
             <Menu DockPanel.Dock="Top">
                 <MenuItem Header="АСУИПП" FontWeight="Bold">
                     <MenuItem Header="Автозапуск при входе" x:Name="AutoStartMenuItem"
-                              IsCheckable="True" Click="AutoStart_Click"/>
+              IsCheckable="True" Click="AutoStart_Click"/>
                     <Separator/>
                     <MenuItem Header="Сменить пользователя" Click="Logout_Click"/>
                     <MenuItem Header="Сбросить настройки" Click="ResetSettings_Click"/>
+                    <Separator/>
+                    <MenuItem Header="Справка" Click="Help_Click"/>
                 </MenuItem>
             </Menu>
 

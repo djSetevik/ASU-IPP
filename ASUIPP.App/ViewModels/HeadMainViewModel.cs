@@ -34,18 +34,25 @@ namespace ASUIPP.App.ViewModels
         public ObservableCollection<TeacherListItem> Teachers { get; }
             = new ObservableCollection<TeacherListItem>();
 
-        private int _grandTotal;
-        public int GrandTotal
-        {
-            get => _grandTotal;
-            set => SetProperty(ref _grandTotal, value);
-        }
+        //private int _grandTotal;
+        //public int GrandTotal
+        //{
+        //    get => _grandTotal;
+        //    set => SetProperty(ref _grandTotal, value);
+        //}
 
         private string _welcomeName;
         public string WelcomeName
         {
             get => _welcomeName;
             set => SetProperty(ref _welcomeName, value);
+        }
+
+        private double _averagePoints;
+        public double AveragePoints
+        {
+            get => _averagePoints;
+            set => SetProperty(ref _averagePoints, value);
         }
 
         public RelayCommand GoToTeacherWorkCommand { get; }
@@ -118,7 +125,6 @@ namespace ASUIPP.App.ViewModels
             var sections = refRepo.GetAllSections();
 
             Teachers.Clear();
-            int grandTotal = 0;
 
             foreach (var t in teachers)
             {
@@ -141,10 +147,13 @@ namespace ASUIPP.App.ViewModels
                     TotalPoints = total
                 });
 
-                grandTotal += total;
+                
             }
 
-            GrandTotal = grandTotal;
+            // В конце метода, после цикла:
+            AveragePoints = Teachers.Count > 0
+                ? Math.Round(Teachers.Average(t => t.TotalPoints), 1)
+                : 0;
         }
 
         public void Refresh()
